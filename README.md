@@ -60,7 +60,7 @@ LLM_PROVIDER=fake FAKE_LLM_FAILURE_RATE=1 npm run demo
 FAKE_LLM_FAILURE_RATE=0.3 LOG_LEVEL=debug npm run demo
 ```
 
-**Reexecutar o mesmo `--period` retoma de onde parou**: quem já está `SENT` é pulado, quem falhou no envio reaproveita o resumo salvo (sem pagar LLM de novo). Para recomeçar do zero, apague `out/<período>`.
+**Reexecutar o mesmo `--period` retoma de onde parou**: quem já está `SENT` é pulado, quem falhou no envio reaproveita o resumo salvo (sem pagar LLM de novo). Para recomeçar do zero use `--fresh` (o `npm run demo` já usa) ou apague `out/<período>`.
 Código de saída: `0` ok · `1` houve alunos com falha · `2` erro de uso/entrada.
 
 ### Formato do CSV

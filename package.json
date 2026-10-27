@@ -8,7 +8,7 @@
     "typecheck": "tsc -p tsconfig.spec.json --noEmit",
     "test": "jest",
     "dispatch": "npm run build && node --env-file-if-exists=.env dist/cli.js dispatch",
-    "demo": "npm run build && node --env-file-if-exists=.env dist/cli.js dispatch --file data/grades.sample.csv --period 2026-1S"
+    "demo": "npm run build && node --env-file-if-exists=.env dist/cli.js dispatch --file data/grades.sample.csv --period 2026-1S --fresh"
   },
   "author": "",
   "license": "MIT",

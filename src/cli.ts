@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { NestFactory } from '@nestjs/core';
@@ -13,6 +14,7 @@ const USAGE = `Uso: node dist/cli.js dispatch --file <notas.csv> --period <2026-
   --file <caminho>       CSV de notas (student_id,name,email,subject,grade)
   --period <rótulo>      Período letivo; identifica a execução e a idempotência (ex.: 2026-1S)
   --validate-only        Só valida o CSV e gera o relatório, sem LLM nem envio
+  --fresh                Apaga o estado do período antes de rodar (reenvia tudo; use em demos)
   --concurrency <n>      Alunos em paralelo (padrão: CONCURRENCY do ambiente)
 `;
 
@@ -23,6 +25,7 @@ async function main(): Promise<number> {
       file: { type: 'string' },
       period: { type: 'string' },
       'validate-only': { type: 'boolean', default: false },
+      fresh: { type: 'boolean', default: false },
       concurrency: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -38,6 +41,7 @@ async function main(): Promise<number> {
   }
 
   const config = loadConfig(process.env);
+  if (values.fresh) await rm(join(config.OUTPUT_DIR, values.period), { recursive: true, force: true });
   const app = await NestFactory.createApplicationContext(
     AppModule.register({
       config,
