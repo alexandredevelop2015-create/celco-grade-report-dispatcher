@@ -1,0 +1,7 @@
+# Caixa de correio de desenvolvimento: recebe os e-mails via SMTP (porta 1025) e mostra na web (8025).
+services:
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "1025:1025"
+      - "8025:8025"
