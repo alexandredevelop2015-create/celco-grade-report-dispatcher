@@ -11,6 +11,16 @@ CSV ──► validar/sanitizar ──► [por aluno, em paralelo] ──► rel
                                persistir resumo → e-mail (retry + breaker + limiter) → SENT
 ```
 
+## Início rápido (3 comandos)
+
+```bash
+npm install
+npm test
+npm run demo      # sem chave, sem Docker, sem custo
+```
+
+Passo a passo detalhado para Windows, roteiro de demonstração e simulação de incidentes: **[docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md)**.
+
 ## Como rodar
 
 Requisitos: Node ≥ 20.6 (testado no 24). Docker é opcional (só para o Mailpit).
@@ -101,6 +111,7 @@ docs/            arquitetura, decisões, escala e roteiro do debriefing
 
 ## Documentação
 
+- [docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md): **o que cada parte do código representa**, critério da banca → arquivo, roteiro de demo
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): diagramas (Mermaid), contratos e máquina de estados
 - [docs/DECISIONS.md](docs/DECISIONS.md): decisões tomadas e **o que ficou de fora e por quê**
 - [docs/SCALING.md](docs/SCALING.md): como chegar a 10k alunos/hora, exatamente-uma-vez, LLM 10× mais caro
