@@ -39,6 +39,8 @@ export interface LoadResult {
   duplicatesIgnored: number;
   /** Alunos com notas contraditórias: nenhum boletim sai até a secretaria resolver. */
   quarantined: string[];
+  /** Todo student_id que apareceu no CSV, mesmo em linha rejeitada: aluno ausente daqui foi REMOVIDO. */
+  seenIds: string[];
   totalRows: number;
 }
 
@@ -71,7 +73,7 @@ export interface GeneratedSummary {
 
 export type SummarySource = 'llm' | 'cache' | 'fallback';
 
-export type StudentStatus = 'GENERATED' | 'SENT' | 'FAILED';
+export type StudentStatus = 'GENERATED' | 'SENT' | 'FAILED' | 'REMOVED';
 
 export type ErrorKind = 'retriable_exhausted' | 'fatal' | 'unexpected' | 'circuit_open' | 'budget';
 
@@ -81,6 +83,9 @@ export interface StudentRecord {
   attempts: number;
   /** Impressão digital das notas/e-mail enviados: mudou => o boletim precisa ser reenviado. */
   dataHash?: string;
+  /** Guardados para poder avisar o aluno se o lançamento for removido do CSV depois. */
+  name?: string;
+  email?: string;
   /** Notas do último boletim ENTREGUE com sucesso: base para dizer o que mudou no próximo. */
   lastSentGrades?: GradeEntry[];
   summary?: SummaryText;

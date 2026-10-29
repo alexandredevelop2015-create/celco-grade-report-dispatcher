@@ -11,6 +11,7 @@ import {
   GradeChange,
   GradeEntry,
   GradeProfile,
+  NotificationMessage,
   StudentGrades,
   StudentRecord,
   SummarySource,
@@ -21,7 +22,7 @@ import { buildProfile, diffGrades, profileCacheKey, studentDataHash, AcademicRul
 import { BudgetGuard, estimateCostUsd, estimateTokens, Pricing } from '../llm/cost';
 import { buildFallbackSummary } from '../llm/fallback-summary';
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from '../llm/prompt';
-import { renderBulletin } from '../notify/render-bulletin';
+import { renderBulletin, renderRemoval } from '../notify/render-bulletin';
 import { AppLogger } from '../observability/logger';
 import { CircuitBreaker } from '../resilience/circuit-breaker';
 import { RateLimiter } from '../resilience/rate-limiter';
@@ -39,7 +40,7 @@ export interface StudentOutcome {
   /** true quando reenviou um boletim já enviado porque as notas mudaram (ou por --resend). */
   updated?: boolean;
   /** Tipo do lançamento, para a planilha de alterações. */
-  kind?: 'novo' | 'atualizado' | 'reenvio';
+  kind?: 'novo' | 'atualizado' | 'reenvio' | 'removido';
   studentName: string;
   /** Disciplinas novas/alteradas em relação ao último boletim enviado. */
   changes?: GradeChange[];
@@ -194,6 +195,54 @@ export class StudentProcessor {
     }
   }
 
+  /**
+   * Alunos que já receberam boletim neste período mas NÃO aparecem mais no CSV (linha apagada).
+   * `deliveredTotal` serve à trava de segurança: apagar quase tudo costuma ser arquivo errado.
+   */
+  async findRemovals(runId: string, seenIds: ReadonlySet<string>): Promise<{ candidates: StudentRecord[]; deliveredTotal: number }> {
+    const records = await this.deps.store.list(runId);
+    const delivered = records.filter((r) => r.status === 'SENT' || r.lastSentGrades !== undefined);
+    return { candidates: delivered.filter((r) => !seenIds.has(r.studentId)), deliveredTotal: delivered.length };
+  }
+
+  /** Avisa o aluno de que o lançamento foi removido e marca o registro como REMOVED (se ele voltar, será "novo"). */
+  async processRemoval(ctx: RunContext, record: StudentRecord): Promise<StudentOutcome | undefined> {
+    const started = this.now();
+    const log = this.deps.logger.child({ runId: ctx.runId, traceId: ctx.traceId, studentId: record.studentId });
+    if (!record.email || !record.name) {
+      log.warn({ event: 'removal_no_contact' }, 'lançamento removido, mas o registro é antigo e não guardou o e-mail: não deu para avisar');
+      return undefined;
+    }
+    const previous = record.lastSentGrades ?? [];
+    const base = {
+      studentId: record.studentId,
+      studentName: record.name,
+      kind: 'removido' as const,
+      changes: previous.map((g) => ({ subject: g.subject, before: g.grade })),
+      usage: NO_USAGE,
+      costUsd: 0,
+      llmAttempts: 0,
+    };
+    try {
+      const message = renderRemoval({ runId: ctx.runId, period: ctx.period, studentId: record.studentId, name: record.name, email: record.email, previous });
+      await this.deliver(message, log);
+      await this.deps.store.put(ctx.runId, {
+        studentId: record.studentId,
+        status: 'REMOVED',
+        attempts: record.attempts,
+        name: record.name,
+        email: record.email,
+        updatedAt: new Date(this.now()).toISOString(),
+      });
+      log.info({ event: 'student_removal_sent' }, 'aviso de lançamento removido enviado');
+      return { ...base, status: 'sent', durationMs: this.now() - started };
+    } catch (error) {
+      const info = toErrorInfo(error);
+      log.warn({ event: 'student_failed', kind: info.kind, err: info.message }, 'falha ao avisar remoção');
+      return { ...base, status: 'failed', error: info, durationMs: this.now() - started };
+    }
+  }
+
   private record(
     student: StudentGrades,
     dataHash: string,
@@ -206,6 +255,8 @@ export class StudentProcessor {
       studentId: student.studentId,
       status,
       dataHash,
+      name: student.name,
+      email: student.email,
       lastSentGrades,
       attempts: obtained?.attempts ?? 0,
       summary: obtained?.summary,
@@ -272,6 +323,11 @@ export class StudentProcessor {
   ): Promise<void> {
     const d = this.deps;
     const message = renderBulletin({ runId: ctx.runId, period: ctx.period, student, profile, summary, version, updated, changes });
+    await this.deliver(message, log);
+  }
+
+  private async deliver(message: NotificationMessage, log: AppLogger): Promise<void> {
+    const d = this.deps;
     await withRetry(
       () =>
         d.notifyBreaker.exec(async () => {

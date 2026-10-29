@@ -163,3 +163,31 @@ Exemplo, depois de corrigir a Matemática da Ana de 12 para 15:
 O e-mail da aluna mostra o mesmo antes/depois (`Matemática: 12 → 15/20`). O estado (`state.json`) guarda só o valor atual; **o histórico está na planilha**. Se o envio falhar, a linha sai com `falha: ...`, e a nova tentativa compara com o último boletim **entregue**, não com o que falhou.
 
 A planilha contém nome do aluno: é um arquivo local de auditoria, não vai para o Git (`out/` está no `.gitignore`).
+
+## 9. Excluir o lançamento de um aluno
+
+Apague **todas as linhas** do aluno no CSV e rode o mesmo comando (mesmo `--period`, sem `--fresh`):
+
+```powershell
+node dist/cli.js dispatch --file data/grades.csv --period 2026-1S
+```
+
+O aluno recebe **"Boletim 2026-1S (lançamento removido)"**, com a lista das notas anuladas. O relatório mostra `Enviados: 1 (0 atualizados, 1 removidos)` e a planilha ganha linhas `removido` com a nota anterior. O aviso sai **uma única vez**: o registro vira `REMOVED`. Se o aluno voltar ao CSV depois, é tratado como **novo**.
+
+Remover **só uma disciplina** (o aluno continua no arquivo) não é "removido": ele recebe o boletim **atualizado** com `Matemática: removida (era 7/20)`.
+
+### Trava de segurança
+
+Apagar muita coisa de uma vez costuma ser arquivo errado (CSV truncado, vazio ou de outro período). Por isso o aviso **não é enviado** quando:
+- o CSV não tem nenhum aluno; ou
+- somem mais de `max(3, metade dos alunos já enviados)`.
+
+Nesse caso o relatório mostra "Atenção: remoções bloqueadas", o código de saída é `1` e nada é enviado. Se for intencional:
+
+```powershell
+node dist/cli.js dispatch --file data/grades.csv --period 2026-1S --confirm-removals
+```
+
+Aluno com **linha rejeitada** (e-mail inválido etc.) ou em **quarentena** continua no arquivo e **não** é tratado como removido.
+
+**Limite conhecido:** registros criados antes deste recurso não guardam o e-mail do aluno. Se um deles for removido, o sistema avisa no log que não conseguiu notificar. Use `npm run demo` (ou `--fresh`) para recriar o estado.

@@ -86,6 +86,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
   const rejected: RejectedRow[] = [];
   const byStudent = new Map<string, { name: string; email: string; grades: Map<string, number> }>();
   const quarantined = new Set<string>();
+  const seenIds = new Set<string>();
   let duplicatesIgnored = 0;
 
   for (const { record, info } of records) {
@@ -97,6 +98,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       subject: sanitizeText(record.subject ?? '', 80),
       grade: parseGrade(record.grade),
     };
+    if (candidate.student_id) seenIds.add(candidate.student_id);
     const result = schema.safeParse(candidate);
     if (!result.success) {
       const field = String(result.error.issues[0]?.path[0] ?? 'row');
@@ -148,6 +150,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
     rejected,
     duplicatesIgnored,
     quarantined: [...quarantined],
+    seenIds: [...seenIds],
     totalRows: records.length,
   };
 }

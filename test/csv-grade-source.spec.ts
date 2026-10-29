@@ -79,3 +79,11 @@ describe('separador do CSV', () => {
     expect(r.students).toHaveLength(1);
   });
 });
+
+describe('seenIds', () => {
+  it('inclui ids de linhas rejeitadas e em quarentena, para não confundi-los com alunos removidos', () => {
+    const r = parseGradesCsv(H + 'A1,Ana,a@x.pt,Algoritmos,12\nA2,Bia,nao-e-email,Algoritmos,10\nA3,Caio,c@x.pt,Algoritmos,12\nA3,Caio,c@x.pt,Algoritmos,15', opts);
+    expect(r.seenIds.sort()).toEqual(['A1', 'A2', 'A3']);
+    expect(r.students.map((s) => s.studentId)).toEqual(['A1']);
+  });
+});

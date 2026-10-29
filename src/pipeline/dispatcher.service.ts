@@ -18,6 +18,8 @@ export interface DispatchOptions {
   validateOnly?: boolean;
   /** Alunos a reenviar mesmo sem mudança nas notas (ex.: pedido da secretaria). */
   resend?: string[];
+  /** Libera o envio de avisos de remoção mesmo quando a trava de segurança dispara. */
+  confirmRemovals?: boolean;
   outputDir: string;
   model: string;
 }
@@ -51,6 +53,7 @@ export class DispatcherService {
     this.analytics.track({ name: 'run_started', runId: options.runId, period: options.period, students: load.students.length });
 
     let outcomes: StudentOutcome[] = [];
+    let removalsBlocked = 0;
     if (!options.validateOnly) {
       const ctx = { runId: options.runId, period: options.period, traceId: tracer.traceId };
       const resend = new Set(options.resend ?? []);
@@ -66,6 +69,25 @@ export class DispatcherService {
           return outcome;
         }),
       );
+
+      // Lançamento apagado do CSV => avisa o aluno. Trava: apagar quase tudo costuma ser arquivo errado.
+      const present = new Set(load.seenIds);
+      const { candidates, deliveredTotal } = await this.processor.findRemovals(options.runId, present);
+      const suspicious = present.size === 0 || candidates.length > Math.max(3, Math.floor(deliveredTotal / 2));
+      if (candidates.length && suspicious && !options.confirmRemovals) {
+        removalsBlocked = candidates.length;
+        log.warn(
+          { event: 'removals_blocked', removals: candidates.length, deliveredTotal },
+          'muitas remoções de uma vez (ou CSV vazio): nada foi enviado. Confira o arquivo e use --confirm-removals se for isso mesmo',
+        );
+      } else if (candidates.length) {
+        const removals = await runWithConcurrency(candidates, options.concurrency, async (record) => {
+          const outcome = await this.processor.processRemoval(ctx, record);
+          if (outcome) this.trackStudent(options.runId, outcome);
+          return outcome;
+        });
+        outcomes = [...outcomes, ...removals.filter((o): o is StudentOutcome => o !== undefined)];
+      }
     }
 
     const changeRows = await new ChangeLedger(join(options.outputDir, options.runId, 'alteracoes.csv')).append(outcomes);
@@ -80,6 +102,7 @@ export class DispatcherService {
       finishedAt: new Date(),
       load: load satisfies LoadResult,
       outcomes,
+      removalsBlocked,
     });
 
     await this.writeReport(options.outputDir, report);

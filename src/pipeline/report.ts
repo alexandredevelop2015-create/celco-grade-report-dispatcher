@@ -20,6 +20,10 @@ export interface RunReport {
     sent: number;
     /** Dos enviados, quantos foram reenvios por nota alterada (ou --resend). */
     updatedResent: number;
+    /** Avisos de lançamento removido enviados com sucesso. */
+    removed: number;
+    /** Remoções detectadas mas NÃO enviadas pela trava de segurança (use --confirm-removals). */
+    removalsBlocked: number;
     failed: number;
     skippedAlreadySent: number;
     failureRate: number;
@@ -51,6 +55,7 @@ export function buildReport(params: {
   finishedAt: Date;
   load: LoadResult;
   outcomes: StudentOutcome[];
+  removalsBlocked?: number;
 }): RunReport {
   const { load, outcomes } = params;
   const processed = outcomes.filter((o) => o.status !== 'skipped');
@@ -84,6 +89,8 @@ export function buildReport(params: {
     result: {
       sent: sent.length,
       updatedResent: sent.filter((o) => o.updated).length,
+      removed: sent.filter((o) => o.kind === 'removido').length,
+      removalsBlocked: params.removalsBlocked ?? 0,
       failed: failed.length,
       skippedAlreadySent: outcomes.length - processed.length,
       failureRate: processed.length ? round(failed.length / processed.length, 4) : 0,
@@ -130,7 +137,7 @@ export function renderReportMarkdown(r: RunReport): string {
     `- Linhas rejeitadas: ${r.input.rejectedRows} · duplicadas ignoradas: ${r.input.duplicatesIgnored} · alunos em quarentena: ${r.input.quarantinedStudents}`,
     '',
     '## Resultado',
-    `- Enviados: ${r.result.sent} (${r.result.updatedResent} atualizados) · falhas: ${r.result.failed} (${pct(r.result.failureRate)}) · já enviados antes: ${r.result.skippedAlreadySent}`,
+    `- Enviados: ${r.result.sent} (${r.result.updatedResent} atualizados, ${r.result.removed} removidos) · falhas: ${r.result.failed} (${pct(r.result.failureRate)}) · já enviados antes: ${r.result.skippedAlreadySent}`,
     `- Resumo por LLM: ${r.result.llmGenerated} · cache: ${r.result.cacheHits} · fallback determinístico: ${r.result.fallbackUsed}`,
     '',
     '## Custo e latência',
@@ -140,6 +147,9 @@ export function renderReportMarkdown(r: RunReport): string {
   ];
   if (r.degraded.length) {
     lines.push('', '## Degradação (fallback usado)', ...r.degraded.map((d) => `- ${d.reason}: ${d.count}`));
+  }
+  if (r.result.removalsBlocked) {
+    lines.push('', '## Atenção: remoções bloqueadas', `- ${r.result.removalsBlocked} alunos sumiram do CSV e NÃO foram avisados (trava de segurança). Confira o arquivo; se for intencional, rode com --confirm-removals.`);
   }
   if (r.failures.length) {
     lines.push('', '## Falhas', ...r.failures.map((f) => `- ${f.studentId} [${f.kind}] ${f.message}`));

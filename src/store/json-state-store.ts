@@ -38,6 +38,13 @@ export class JsonStateStore implements RunStore {
     return this.state.records[`${runId}:${studentId}`];
   }
 
+  async list(runId: string): Promise<StudentRecord[]> {
+    const prefix = `${runId}:`;
+    return Object.entries(this.state.records)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, record]) => record);
+  }
+
   async put(runId: string, record: StudentRecord): Promise<void> {
     this.state.records[`${runId}:${record.studentId}`] = record;
     await this.persist();

@@ -239,3 +239,14 @@ describe('registro do que mudou', () => {
     expect(notifier.sent[1]!.subject).toContain('(atualizado)');
   });
 });
+
+describe('disciplina removida de aluno que continua no CSV', () => {
+  it('reenvia como atualizado mostrando a disciplina removida', async () => {
+    const { processor, notifier } = buildProcessor();
+    await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 7]]));
+    const outcome = await processor.process(ctx, student('A1', [['Algoritmos', 18]]));
+    expect(outcome.kind).toBe('atualizado');
+    expect(outcome.changes).toEqual([{ subject: 'Matemática', before: 7 }]);
+    expect(notifier.sent[1]!.text).toContain('Matemática: removida (era 7/20)');
+  });
+});

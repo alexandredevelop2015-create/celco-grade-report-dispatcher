@@ -21,6 +21,25 @@ npm run demo      # sem chave, sem Docker, sem custo
 
 Passo a passo detalhado para Windows, roteiro de demonstração e simulação de incidentes: **[docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md)**.
 
+## Comandos do dia a dia
+
+Existe **um só comando**. O que muda é o que você faz **no CSV antes** de rodá-lo; a ferramenta compara com o que já foi enviado naquele período e decide quem recebe e-mail.
+
+```bash
+node dist/cli.js dispatch --file data/grades.csv --period 2026-1S
+```
+
+| Quero... | O que faço no CSV | E-mail enviado |
+|---|---|---|
+| **Enviar o lote do semestre** | Nada (CSV completo). Na primeira vez com um `--period` novo | Boletim de todos |
+| **Lançar um aluno novo** | Acrescento as linhas dele | Só ele: boletim normal |
+| **Alterar uma nota** | Mudo a nota (ou acrescento/removo uma disciplina) | Só ele: "Boletim (atualizado)" com o antes → depois |
+| **Excluir o lançamento de um aluno** | Apago **todas** as linhas dele | Só ele: "Boletim (lançamento removido)" |
+| Reenviar alguém sem mudança | Nada | `--resend A1001` (vários: `A1001,A1002`) |
+| Só conferir o arquivo | Nada | Nenhum: `--validate-only` |
+
+Regras: use sempre o **mesmo `--period`** do lote original e **não use `--fresh`** (ele apaga o estado e reenvia todos). Cada lançamento fica registrado em `out/<período>/alteracoes.csv`. Se muitos alunos sumirem do CSV de uma vez (provável arquivo errado), a remoção é **bloqueada**: confira e use `--confirm-removals`. Detalhes: [docs/SIMULACAO.md](docs/SIMULACAO.md).
+
 ## Como rodar
 
 Requisitos: Node ≥ 20.6 (testado no 24). Docker é opcional (só para o Mailpit).

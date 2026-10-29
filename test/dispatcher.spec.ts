@@ -14,6 +14,7 @@ const load = (n: number): LoadResult => ({
   rejected: [{ line: 99, reason: 'INVALID_EMAIL', field: 'email' }],
   duplicatesIgnored: 2,
   quarantined: [],
+  seenIds: Array.from({ length: n }, (_, i) => `A${i}`),
   totalRows: n + 3,
 });
 
@@ -77,5 +78,88 @@ describe('percentile', () => {
     expect(percentile(xs, 50)).toBe(50);
     expect(percentile(xs, 95)).toBe(95);
     expect(percentile([], 95)).toBe(0);
+  });
+});
+
+describe('lançamento removido do CSV', () => {
+  const setup = async (n: number) => {
+    const outputDir = await mkdtemp(join(tmpdir(), 'dispatch-'));
+    const built = buildProcessor();
+    const current = { value: load(n) };
+    const service = new DispatcherService({ load: async () => current.value }, built.processor, new InMemoryAnalyticsSink(), createLogger('silent'));
+    const opts = { runId: 'r1', period: '2026-1S', concurrency: 2, outputDir, model: 'm' };
+    return { service, opts, current, ...built };
+  };
+
+  it('avisa o aluno que sumiu do CSV, uma única vez, e o registro vira REMOVED', async () => {
+    const { service, opts, current, notifier, store } = await setup(5);
+    await service.run(opts);
+    notifier.sent = [];
+
+    const base = current.value;
+    current.value = { ...base, students: base.students.filter((s) => s.studentId !== 'A2'), seenIds: base.seenIds.filter((id) => id !== 'A2') };
+    const report = await service.run(opts);
+
+    expect(report.result.removed).toBe(1);
+    expect(notifier.sent).toHaveLength(1);
+    expect(notifier.sent[0]!.subject).toContain('(lançamento removido)');
+    expect(notifier.sent[0]!.text).toContain('Notas anuladas');
+    expect((await store.get('r1', 'A2'))?.status).toBe('REMOVED');
+
+    const again = await service.run(opts);
+    expect(again.result.removed).toBe(0);
+    expect(notifier.sent).toHaveLength(1);
+  });
+
+  it('aluno com linha rejeitada (mas ainda no CSV) NÃO é tratado como removido', async () => {
+    const { service, opts, current, notifier } = await setup(5);
+    await service.run(opts);
+    notifier.sent = [];
+    const base = current.value;
+    // A2 continua no arquivo (seenIds), só que a linha dele foi rejeitada e ele não está em `students`
+    current.value = { ...base, students: base.students.filter((s) => s.studentId !== 'A2') };
+    const report = await service.run(opts);
+    expect(report.result.removed).toBe(0);
+    expect(notifier.sent).toHaveLength(0);
+  });
+
+  it('trava de segurança: sumiço em massa não envia nada sem --confirm-removals', async () => {
+    const { service, opts, current, notifier } = await setup(8);
+    await service.run(opts);
+    notifier.sent = [];
+    const base = current.value;
+    current.value = { ...base, students: base.students.slice(0, 2), seenIds: ['A0', 'A1'] };
+
+    const blocked = await service.run(opts);
+    expect(blocked.result.removalsBlocked).toBe(6);
+    expect(blocked.result.removed).toBe(0);
+    expect(notifier.sent).toHaveLength(0);
+
+    const confirmed = await service.run({ ...opts, confirmRemovals: true });
+    expect(confirmed.result.removed).toBe(6);
+    expect(notifier.sent).toHaveLength(6);
+  });
+
+  it('CSV vazio (sem nenhum aluno) também é bloqueado', async () => {
+    const { service, opts, current, notifier } = await setup(4);
+    await service.run(opts);
+    notifier.sent = [];
+    current.value = { ...current.value, students: [], seenIds: [] };
+    const report = await service.run(opts);
+    expect(report.result.removalsBlocked).toBe(4);
+    expect(notifier.sent).toHaveLength(0);
+  });
+
+  it('aluno removido que volta ao CSV recebe boletim como novo', async () => {
+    const { service, opts, current, notifier } = await setup(5);
+    await service.run(opts);
+    const base = current.value;
+    current.value = { ...base, students: base.students.filter((s) => s.studentId !== 'A2'), seenIds: base.seenIds.filter((id) => id !== 'A2') };
+    await service.run(opts);
+    notifier.sent = [];
+    current.value = base;
+    const report = await service.run(opts);
+    expect(report.result.sent).toBe(1);
+    expect(notifier.sent[0]!.subject).toBe('Boletim 2026-1S');
   });
 });

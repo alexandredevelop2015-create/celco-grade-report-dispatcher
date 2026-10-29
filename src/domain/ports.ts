@@ -24,6 +24,7 @@ export interface Notifier {
 export interface RunStore {
   get(runId: string, studentId: string): Promise<StudentRecord | undefined>;
   put(runId: string, record: StudentRecord): Promise<void>;
+  list(runId: string): Promise<StudentRecord[]>;
 }
 
 export interface SummaryCache {
