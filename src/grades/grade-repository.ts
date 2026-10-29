@@ -6,12 +6,13 @@ import { FatalError } from '../domain/errors';
 import { detectDelimiter } from './csv-grade-source';
 import { sanitizeText } from './sanitize';
 
-const HEADER = ['student_id', 'name', 'email', 'subject', 'grade'] as const;
+const HEADER = ['student_id', 'name', 'email', 'phone', 'subject', 'grade'] as const;
 
 interface RawRow {
   student_id: string;
   name: string;
   email: string;
+  phone: string;
   subject: string;
   grade: string;
 }
@@ -41,6 +42,8 @@ export interface StudentInput {
   studentId: string;
   name: string;
   email: string;
+  /** Só dígitos com DDI (5511999990000); vazio = sem WhatsApp. */
+  phone?: string;
   grades: { subject: string; grade: number }[];
 }
 
@@ -65,6 +68,11 @@ const inputSchema = (scaleMax: number) =>
       .transform((v) => sanitizeText(v))
       .pipe(z.string().min(1, 'nome obrigatório').max(100).refine(noFormula, 'nome não pode começar com = + @')),
     email: z.string().trim().toLowerCase().email('e-mail inválido').max(120),
+    phone: z
+      .string()
+      .optional()
+      .transform((v) => (v ?? '').replace(/[\s().+-]/g, ''))
+      .pipe(z.string().regex(/^(\d{10,15})?$/, 'telefone inválido: use DDI + DDD + número (ex.: 5511999990000)')),
     grades: z
       .array(
         z.object({
@@ -109,16 +117,16 @@ export class CsvGradeRepository {
 
   async create(input: unknown): Promise<StudentView> {
     const data = this.validate(input);
-    const { rows, delimiter } = await this.read();
+    const { rows, delimiter, hasPhone } = await this.read();
     if (rows.some((r) => r.student_id === data.studentId)) throw new StudentExistsError(data.studentId);
-    await this.write([...rows, ...toRows(data, delimiter)], delimiter);
+    await this.write([...rows, ...toRows(data, delimiter)], delimiter, hasPhone);
     return { ...data, conflict: false };
   }
 
   /** Substitui todo o lançamento do aluno (dados + disciplinas); a matrícula não muda. */
   async replace(studentId: string, input: unknown): Promise<{ before: StudentView; after: StudentView }> {
     const data = this.validate({ ...(input as object), studentId });
-    const { rows, delimiter } = await this.read();
+    const { rows, delimiter, hasPhone } = await this.read();
     const first = rows.findIndex((r) => r.student_id === studentId);
     if (first < 0) throw new StudentNotFoundError(studentId);
     const before = groupRows(rows).find((s) => s.studentId === studentId)!;
@@ -126,17 +134,18 @@ export class CsvGradeRepository {
     // Mantém a posição original do aluno no arquivo.
     const position = rows.slice(0, first).filter((r) => r.student_id !== studentId).length;
     rest.splice(position, 0, ...toRows(data, delimiter));
-    await this.write(rest, delimiter);
+    await this.write(rest, delimiter, hasPhone);
     return { before, after: { ...data, conflict: false } };
   }
 
   async remove(studentId: string): Promise<StudentView> {
-    const { rows, delimiter } = await this.read();
+    const { rows, delimiter, hasPhone } = await this.read();
     const before = groupRows(rows).find((s) => s.studentId === studentId);
     if (!before) throw new StudentNotFoundError(studentId);
     await this.write(
       rows.filter((r) => r.student_id !== studentId),
       delimiter,
+      hasPhone,
     );
     return before;
   }
@@ -149,9 +158,9 @@ export class CsvGradeRepository {
     return parsed.data;
   }
 
-  private async read(): Promise<{ rows: RawRow[]; delimiter: ',' | ';' }> {
+  private async read(): Promise<{ rows: RawRow[]; delimiter: ',' | ';'; hasPhone: boolean }> {
     const content = await readFile(this.path, 'utf8').catch((e: NodeJS.ErrnoException) => {
-      if (e.code === 'ENOENT') return `${HEADER.join(',')}\n`;
+      if (e.code === 'ENOENT') return 'student_id,name,email,subject,grade\n';
       throw new FatalError(`Não foi possível ler o ficheiro de notas: ${e.message}`);
     });
     const delimiter = detectDelimiter(content);
@@ -167,15 +176,19 @@ export class CsvGradeRepository {
       student_id: r.student_id ?? '',
       name: r.name ?? '',
       email: r.email ?? '',
+      phone: r.phone ?? '',
       subject: r.subject ?? '',
       grade: r.grade ?? '',
     }));
-    return { rows, delimiter };
+    const hasPhone = records.length > 0 ? 'phone' in records[0]! : false;
+    return { rows, delimiter, hasPhone };
   }
 
-  private async write(rows: RawRow[], delimiter: ',' | ';'): Promise<void> {
+  private async write(rows: RawRow[], delimiter: ',' | ';', hasPhone: boolean): Promise<void> {
     const cell = (v: string) => (v.includes(delimiter) || /["\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-    const body = [HEADER.join(delimiter), ...rows.map((r) => HEADER.map((h) => cell(r[h])).join(delimiter))].join('\r\n');
+    // A coluna phone só aparece no arquivo quando alguém usa (ou já usava): CSVs antigos ficam intactos.
+    const columns = HEADER.filter((h) => h !== 'phone' || hasPhone || rows.some((r) => r.phone));
+    const body = [columns.join(delimiter), ...rows.map((r) => columns.map((h) => cell(r[h])).join(delimiter))].join('\r\n');
     await mkdir(dirname(this.path), { recursive: true });
     const tmp = `${this.path}.tmp`;
     await writeFile(tmp, body + '\r\n', 'utf8');
@@ -188,6 +201,7 @@ function toRows(data: StudentInput, delimiter: ',' | ';'): RawRow[] {
     student_id: data.studentId,
     name: data.name,
     email: data.email,
+    phone: data.phone ?? '',
     subject: g.subject,
     // Excel em português espera vírgula decimal quando o arquivo usa ';'.
     grade: delimiter === ';' ? String(g.grade).replace('.', ',') : String(g.grade),
@@ -206,11 +220,12 @@ function groupRows(rows: RawRow[]): StudentView[] {
     const email = r.email.trim().toLowerCase();
     let s = byId.get(r.student_id);
     if (!s) {
-      s = { studentId: r.student_id, name: r.name, email, grades: [], conflict: false };
+      s = { studentId: r.student_id, name: r.name, email, ...(r.phone ? { phone: r.phone.replace(/\D/g, '') } : {}), grades: [], conflict: false };
       byId.set(r.student_id, s);
     } else if (s.email !== email) {
       s.conflict = true;
     }
+    if (!s.phone && r.phone) s.phone = r.phone.replace(/\D/g, '');
     const grade = parseGrade(r.grade);
     const existing = s.grades.find((g) => g.subject === r.subject);
     if (!existing) s.grades.push({ subject: r.subject, grade });

@@ -43,6 +43,10 @@ Pode-se desmarcar "Avisar o aluno por e-mail": a alteração é gravada e audita
 
 Segurança: o servidor escuta só em `127.0.0.1`, valida `Host`/`Origin` (DNS rebinding e CSRF), exige `application/json` nas escritas, usa CSP estrita e nunca injeta texto como HTML. Não há login: é uma ferramenta local da secretaria; para expor na rede, ponha um proxy com autenticação na frente.
 
+## WhatsApp (n8n + Evolution GO)
+
+Com `N8N_WEBHOOK_URL` definido, cada boletim, correção e aviso de remoção também vai por WhatsApp para alunos que tenham telefone (coluna opcional `phone` no CSV ou campo na tela). O e-mail continua sendo o canal oficial; o WhatsApp é complemento em melhor esforço e nunca invalida um e-mail já entregue. Importe `n8n/boletim-whatsapp.json` no n8n e siga **[docs/WHATSAPP.md](docs/WHATSAPP.md)**.
+
 ## Comandos do dia a dia
 
 Existe **um só comando**. O que muda é o que você faz **no CSV antes** de rodá-lo; a ferramenta compara com o que já foi enviado naquele período e decide quem recebe e-mail.
@@ -68,7 +72,7 @@ Requisitos: Node ≥ 20.6 (testado no 24). Docker é opcional (só para o Mailpi
 
 ```bash
 npm install
-npm test                 # 110 testes unitários, de integração e de contrato
+npm test                 # 127 testes unitários, de integração e de contrato
 npm run demo             # roda o CSV de exemplo: LLM fake, e-mail impresso no console, custo zero
 ```
 
@@ -143,6 +147,7 @@ src/
   notify/        e-mail (SMTP), console, template do boletim
   resilience/    retry, circuit breaker, rate limiter, pool de concorrência
   store/         estado por aluno + cache (JSON atômico)
+  n8n/           workflow do WhatsApp (importável)
   web/           interface web: servidor HTTP (node:http), casos de uso e auditoria por e-mail
   pipeline/      StudentProcessor (1 aluno, idempotente), DispatcherService (lote), relatório
   observability/ logs estruturados (pino + redaction), tracer simulado, analytics
@@ -153,6 +158,7 @@ docs/            arquitetura, decisões, escala e roteiro do debriefing
 
 ## Documentação
 
+- [docs/WHATSAPP.md](docs/WHATSAPP.md): canal WhatsApp via n8n + Evolution GO (configuração, regras de falha, teste com curl)
 - [docs/SIMULACAO.md](docs/SIMULACAO.md): **roteiro executável** com 6 cenários (feliz, idempotência, LLM fora, e-mail fora, recuperação) e o que esperar
 - [docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md): **o que cada parte do código representa**, critério da banca → arquivo, roteiro de demo
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): diagramas (Mermaid), contratos e máquina de estados

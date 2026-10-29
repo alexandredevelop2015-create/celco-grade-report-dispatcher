@@ -23,6 +23,11 @@ const schema = z.object({
   /** Secretaria: recebe um e-mail de auditoria a cada alteração feita pela interface. */
   ADMIN_EMAIL: z.string().email().optional(),
   UI_PORT: num(3000),
+  /** Webhook do n8n que envia o WhatsApp via Evolution GO. Vazio = canal WhatsApp desligado. */
+  N8N_WEBHOOK_URL: z.string().url().optional(),
+  N8N_WEBHOOK_SECRET: z.string().optional(),
+  /** WhatsApp pune rajadas: padrão de 1 mensagem por segundo. */
+  WHATSAPP_REQUESTS_PER_SEC: num(1),
   NOTIFIER: z.enum(['console', 'smtp', 'resend']).default('console'),
   RESEND_API_KEY: z.string().optional(),
   /** Plano gratuito do Resend: 2 requisições por segundo. */

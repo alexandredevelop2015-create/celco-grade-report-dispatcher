@@ -66,8 +66,17 @@ export function renderBulletin(params: {
     '<p>Secretaria Académica</p>',
   ].join('');
 
+  const whatsappText = [
+    `Olá, ${firstName}! ${updated ? `O teu boletim ${period} foi *atualizado*.` : `O teu boletim ${period} já está disponível.`}`,
+    ...(changed.length ? changed.map((c) => `• ${changeLine(c)}`) : []),
+    `Média: *${profile.average}/${profile.scale}*. Os detalhes seguiram para o teu e-mail.`,
+    '_Secretaria Académica_',
+  ].join('\n');
+
   return {
     idempotencyKey: `${runId}:${student.studentId}:${version.slice(0, 8)}`,
+    phone: student.phone,
+    whatsappText,
     to: student.email,
     toName: student.name,
     subject: updated ? `Boletim ${period} (atualizado)` : `Boletim ${period}`,
@@ -83,9 +92,10 @@ export function renderRemoval(params: {
   studentId: string;
   name: string;
   email: string;
+  phone?: string;
   previous: { subject: string; grade: number }[];
 }): NotificationMessage {
-  const { runId, period, studentId, name, email, previous } = params;
+  const { runId, period, studentId, name, email, phone, previous } = params;
   const firstName = name.split(' ')[0] ?? name;
   const lines = previous.map((g) => `  - ${g.subject}: ${g.grade}`);
   const text = [
@@ -108,6 +118,8 @@ export function renderRemoval(params: {
   ].join('');
   return {
     idempotencyKey: `${runId}:${studentId}:removido`,
+    phone,
+    whatsappText: [`Olá, ${firstName}! O teu lançamento de notas do período ${period} foi *removido* pela secretaria.`, 'As notas comunicadas antes deixam de ter efeito.', '_Secretaria Académica_'].join('\n'),
     to: email,
     toName: name,
     subject: `Boletim ${period} (lançamento removido)`,

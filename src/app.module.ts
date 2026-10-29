@@ -16,6 +16,7 @@ import { FakeSummaryGenerator } from './llm/fake-summary-generator';
 import { ConsoleNotifier } from './notify/console-notifier';
 import { ResendNotifier } from './notify/resend-notifier';
 import { SmtpNotifier } from './notify/smtp-notifier';
+import { MultiChannelNotifier, WhatsappWebhookNotifier } from './notify/whatsapp-notifier';
 import { FileAnalyticsSink } from './observability/analytics';
 import { AppLogger, createLogger } from './observability/logger';
 import { DispatcherService } from './pipeline/dispatcher.service';
@@ -69,8 +70,8 @@ export class AppModule {
         },
         {
           provide: TOKENS.NOTIFIER,
-          useFactory: (): Notifier =>
-            options.notifier ??
+          useFactory: (logger: AppLogger): Notifier => {
+            const email = options.notifier ??
             (config.NOTIFIER === 'resend'
               ? new ResendNotifier({ apiKey: config.RESEND_API_KEY!, from: config.MAIL_FROM })
               : config.NOTIFIER === 'smtp'
@@ -81,7 +82,17 @@ export class AppModule {
                   pass: config.SMTP_PASS,
                   from: config.MAIL_FROM,
                 })
-              : new ConsoleNotifier()),
+              : new ConsoleNotifier());
+            if (!config.N8N_WEBHOOK_URL) return email;
+            return new MultiChannelNotifier({
+              primary: email,
+              whatsapp: new WhatsappWebhookNotifier({ url: config.N8N_WEBHOOK_URL, secret: config.N8N_WEBHOOK_SECRET }),
+              limiter: new RateLimiter({ ratePerSec: config.WHATSAPP_REQUESTS_PER_SEC }),
+              retry: { attempts: config.RETRY_ATTEMPTS, baseDelayMs: config.RETRY_BASE_MS, maxDelayMs: config.RETRY_MAX_MS },
+              logger,
+            });
+          },
+          inject: [TOKENS.LOGGER],
         },
         { provide: 'STATE_STORE', useFactory: () => JsonStateStore.open(options.statePath) },
         { provide: TOKENS.RUN_STORE, useExisting: 'STATE_STORE' },

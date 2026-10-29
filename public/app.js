@@ -122,7 +122,7 @@ function renderStudents() {
           'tr',
           {},
           h('td', {}, s.studentId),
-          h('td', {}, h('div', {}, s.name), h('div', { class: 'muted' }, s.email)),
+          h('td', {}, h('div', {}, s.name), h('div', { class: 'muted' }, s.email + (s.phone ? ' · WhatsApp ' + s.phone : ''))),
           h('td', { class: 'grades' }, s.grades.map((g, i) => h('span', {}, i ? ' · ' : '', `${g.subject} `, h('span', { class: g.grade < state.passMark ? 'low' : '' }, String(g.grade))))),
           h('td', { class: 'num' }, `${s.average}/${state.scaleMax}`),
           h('td', {}, h('span', { class: `chip ${kind}`, title: s.error || '' }, label)),
@@ -204,6 +204,7 @@ function openForm(student) {
   f.studentId.readOnly = Boolean(student);
   f.name.value = student?.name ?? '';
   f.email.value = student?.email ?? '';
+  f.phone.value = student?.phone ?? '';
   f.notify.checked = true;
   $('#form-errors').textContent = '';
   $('#grade-rows').replaceChildren(...(student ? student.grades : [{}]).map((g) => gradeRow(g.subject, g.grade)));
@@ -216,7 +217,7 @@ function readForm() {
     .map((row) => ({ subject: row.children[0].value.trim(), raw: row.children[1].value.trim().replace(',', '.') }))
     .filter((g) => g.subject || g.raw)
     .map((g) => ({ subject: g.subject, grade: g.raw === '' ? NaN : Number(g.raw) }));
-  return { studentId: f.studentId.value.trim(), name: f.name.value, email: f.email.value, grades, notify: f.notify.checked };
+  return { studentId: f.studentId.value.trim(), name: f.name.value, email: f.email.value, phone: f.phone.value, grades, notify: f.notify.checked };
 }
 
 async function saveStudent(ev) {

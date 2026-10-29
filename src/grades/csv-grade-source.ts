@@ -24,7 +24,15 @@ export const rowSchema = (scaleMax: number) =>
     email: z.string().email().max(120),
     subject: z.string().min(1).max(80),
     grade: z.number().min(0).max(scaleMax),
+    phone: z.string().regex(/^\d{10,15}$/).optional(),
   });
+
+/** "+55 (11) 99999-0000" -> "5511999990000"; vazio -> undefined; lixo -> devolve como veio para o schema rejeitar. */
+export function normalizePhone(raw: string | undefined): string | undefined {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return undefined;
+  return /^\+?[\d\s().-]+$/.test(trimmed) ? trimmed.replace(/\D/g, '') : trimmed;
+}
 
 function reasonFor(field: string, value: string | undefined): RejectReason {
   if (value === undefined || value.trim() === '') return 'MISSING_FIELD';
@@ -84,7 +92,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
 
   const schema = rowSchema(options.scaleMax);
   const rejected: RejectedRow[] = [];
-  const byStudent = new Map<string, { name: string; email: string; grades: Map<string, number> }>();
+  const byStudent = new Map<string, { name: string; email: string; phone?: string; grades: Map<string, number> }>();
   const quarantined = new Set<string>();
   const seenIds = new Set<string>();
   let duplicatesIgnored = 0;
@@ -97,6 +105,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       email: (record.email ?? '').trim().toLowerCase(),
       subject: sanitizeText(record.subject ?? '', 80),
       grade: parseGrade(record.grade),
+      phone: normalizePhone(record.phone),
     };
     if (candidate.student_id) seenIds.add(candidate.student_id);
     const result = schema.safeParse(candidate);
@@ -112,6 +121,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       byStudent.set(row.student_id, {
         name: row.name,
         email: row.email,
+        phone: row.phone,
         grades: new Map([[row.subject, row.grade]]),
       });
       continue;
@@ -122,6 +132,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       quarantined.add(row.student_id);
       continue;
     }
+    known.phone ??= row.phone;
     const previous = known.grades.get(row.subject);
     if (previous === undefined) {
       known.grades.set(row.subject, row.grade);
@@ -141,6 +152,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       studentId,
       name: s.name,
       email: s.email,
+      ...(s.phone ? { phone: s.phone } : {}),
       grades: [...s.grades].map(([subject, grade]) => ({ subject, grade })),
     });
   }

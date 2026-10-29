@@ -24,3 +24,8 @@ export function escapeHtml(input: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/** 5511999990000 -> 55*******0000 (sem expor o número inteiro em logs). */
+export function maskPhone(phone: string): string {
+  return phone.length <= 6 ? '***' : `${phone.slice(0, 2)}${'*'.repeat(phone.length - 6)}${phone.slice(-4)}`;
+}
