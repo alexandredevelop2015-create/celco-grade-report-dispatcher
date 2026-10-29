@@ -111,6 +111,7 @@ docs/            arquitetura, decisões, escala e roteiro do debriefing
 
 ## Documentação
 
+- [docs/SIMULACAO.md](docs/SIMULACAO.md): **roteiro executável** com 6 cenários (feliz, idempotência, LLM fora, e-mail fora, recuperação) e o que esperar
 - [docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md): **o que cada parte do código representa**, critério da banca → arquivo, roteiro de demo
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): diagramas (Mermaid), contratos e máquina de estados
 - [docs/DECISIONS.md](docs/DECISIONS.md): decisões tomadas e **o que ficou de fora e por quê**
