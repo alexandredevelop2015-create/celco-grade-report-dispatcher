@@ -35,3 +35,14 @@ export function profileCacheKey(profile: GradeProfile, model: string, promptVers
     .update(JSON.stringify({ profile, model, promptVersion }))
     .digest('hex');
 }
+
+/**
+ * Impressão digital do que vai no boletim (nome, e-mail e notas por disciplina, em ordem estável).
+ * Se mudar entre duas execuções do mesmo período, o aluno recebe um boletim atualizado.
+ */
+export function studentDataHash(student: StudentGrades): string {
+  const grades = [...student.grades].sort((a, b) => a.subject.localeCompare(b.subject, 'pt'));
+  return createHash('sha256')
+    .update(JSON.stringify({ name: student.name, email: student.email, grades }))
+    .digest('hex');
+}

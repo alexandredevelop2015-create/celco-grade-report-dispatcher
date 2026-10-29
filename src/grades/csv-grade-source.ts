@@ -33,6 +33,12 @@ function reasonFor(field: string, value: string | undefined): RejectReason {
   return 'INVALID_FIELD';
 }
 
+/** Cabeçalho com ';' e sem ',' => separador é ponto e vírgula. */
+export function detectDelimiter(content: string): ',' | ';' {
+  const header = content.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] ?? '';
+  return header.includes(';') && !header.includes(',') ? ';' : ',';
+}
+
 /** Aceita "17,5" e "17.5"; qualquer outra coisa vira NaN e é rejeitada pelo schema. */
 function parseGrade(raw: string | undefined): number {
   if (raw === undefined || raw.trim() === '') return NaN;
@@ -57,6 +63,8 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
   let records: CsvRecord[];
   try {
     records = parse(content, {
+      // Excel em português salva com ';': detecta pelo cabeçalho.
+      delimiter: detectDelimiter(content),
       columns: (header: string[]) => header.map((h) => h.trim().toLowerCase()),
       skip_empty_lines: true,
       trim: true,

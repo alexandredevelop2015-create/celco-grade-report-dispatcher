@@ -63,3 +63,19 @@ describe('parseGradesCsv', () => {
     expect(() => parseGradesCsv('id,nome\n1,Ana', opts)).toThrow(/Cabeçalhos em falta/);
   });
 });
+
+describe('separador do CSV', () => {
+  it('lê CSV com ponto e vírgula (Excel em português) e decimal com vírgula', () => {
+    const r = parseGradesCsv('student_id;name;email;subject;grade\nA1;Ana;a@x.pt;Algoritmos;13,5\nA1;Ana;a@x.pt;Matemática;12', opts);
+    expect(r.rejected).toEqual([]);
+    expect(r.students[0]!.grades).toEqual([
+      { subject: 'Algoritmos', grade: 13.5 },
+      { subject: 'Matemática', grade: 12 },
+    ]);
+  });
+
+  it('ignora BOM do UTF-8 no início do arquivo', () => {
+    const r = parseGradesCsv('﻿student_id;name;email;subject;grade\nA1;Ana;a@x.pt;Algoritmos;10', opts);
+    expect(r.students).toHaveLength(1);
+  });
+});

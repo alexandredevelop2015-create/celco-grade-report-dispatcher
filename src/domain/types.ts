@@ -72,6 +72,8 @@ export interface StudentRecord {
   studentId: string;
   status: StudentStatus;
   attempts: number;
+  /** Impressão digital das notas/e-mail enviados: mudou => o boletim precisa ser reenviado. */
+  dataHash?: string;
   summary?: SummaryText;
   summarySource?: SummarySource;
   error?: { kind: ErrorKind; message: string };

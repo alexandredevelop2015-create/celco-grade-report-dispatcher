@@ -18,6 +18,8 @@ export interface RunReport {
   };
   result: {
     sent: number;
+    /** Dos enviados, quantos foram reenvios por nota alterada (ou --resend). */
+    updatedResent: number;
     failed: number;
     skippedAlreadySent: number;
     failureRate: number;
@@ -81,6 +83,7 @@ export function buildReport(params: {
     },
     result: {
       sent: sent.length,
+      updatedResent: sent.filter((o) => o.updated).length,
       failed: failed.length,
       skippedAlreadySent: outcomes.length - processed.length,
       failureRate: processed.length ? round(failed.length / processed.length, 4) : 0,
@@ -127,7 +130,7 @@ export function renderReportMarkdown(r: RunReport): string {
     `- Linhas rejeitadas: ${r.input.rejectedRows} · duplicadas ignoradas: ${r.input.duplicatesIgnored} · alunos em quarentena: ${r.input.quarantinedStudents}`,
     '',
     '## Resultado',
-    `- Enviados: ${r.result.sent} · falhas: ${r.result.failed} (${pct(r.result.failureRate)}) · já enviados antes: ${r.result.skippedAlreadySent}`,
+    `- Enviados: ${r.result.sent} (${r.result.updatedResent} atualizados) · falhas: ${r.result.failed} (${pct(r.result.failureRate)}) · já enviados antes: ${r.result.skippedAlreadySent}`,
     `- Resumo por LLM: ${r.result.llmGenerated} · cache: ${r.result.cacheHits} · fallback determinístico: ${r.result.fallbackUsed}`,
     '',
     '## Custo e latência',

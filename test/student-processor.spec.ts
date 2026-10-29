@@ -12,7 +12,7 @@ describe('StudentProcessor', () => {
     expect(outcome).toMatchObject({ status: 'sent', source: 'llm' });
     expect(outcome.costUsd).toBeGreaterThan(0);
     expect(notifier.sent).toHaveLength(1);
-    expect(notifier.sent[0]!.idempotencyKey).toBe('run-1:A1');
+    expect(notifier.sent[0]!.idempotencyKey).toMatch(/^run-1:A1:[0-9a-f]{8}$/);
     expect((await store.get('run-1', 'A1'))?.status).toBe('SENT');
   });
 
@@ -151,5 +151,56 @@ describe('retomada após fallback', () => {
     expect(outcome).toMatchObject({ status: 'sent', source: 'llm' });
     expect(generator.calls).toBe(1);
     expect(notifier.sent).toHaveLength(1);
+  });
+});
+
+describe('reenvio quando as notas mudam', () => {
+  it('nota alterada de aluno já enviado gera boletim atualizado com novo resumo', async () => {
+    const { processor, notifier, deps } = buildProcessor();
+    const generator = deps.generator as FakeSummaryGenerator;
+    await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 7]]));
+
+    const outcome = await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 15]]));
+
+    expect(outcome).toMatchObject({ status: 'sent', updated: true });
+    expect(notifier.sent).toHaveLength(2);
+    expect(notifier.sent[1]!.subject).toContain('(atualizado)');
+    expect(notifier.sent[1]!.text).toContain('alteração nas tuas notas');
+    expect(notifier.sent[1]!.idempotencyKey).not.toBe(notifier.sent[0]!.idempotencyKey);
+    expect(generator.calls).toBe(2);
+  });
+
+  it('disciplina acrescentada a aluno já enviado também reenvia', async () => {
+    const { processor, notifier } = buildProcessor();
+    await processor.process(ctx, student('A1', [['Algoritmos', 18]]));
+    const outcome = await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 12]]));
+    expect(outcome).toMatchObject({ status: 'sent', updated: true });
+    expect(notifier.sent).toHaveLength(2);
+  });
+
+  it('sem mudança nas notas continua pulando (mesmo após reordenar disciplinas)', async () => {
+    const { processor, notifier } = buildProcessor();
+    await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 7]]));
+    const outcome = await processor.process(ctx, student('A1', [['Matemática', 7], ['Algoritmos', 18]]));
+    expect(outcome.status).toBe('skipped');
+    expect(notifier.sent).toHaveLength(1);
+  });
+
+  it('forceResend reenvia mesmo sem mudança, reaproveitando o resumo (custo zero)', async () => {
+    const { processor, notifier, deps } = buildProcessor();
+    const generator = deps.generator as FakeSummaryGenerator;
+    await processor.process(ctx, student());
+    const outcome = await processor.process(ctx, student(), { forceResend: true });
+    expect(outcome).toMatchObject({ status: 'sent', updated: true, costUsd: 0 });
+    expect(notifier.sent).toHaveLength(2);
+    expect(generator.calls).toBe(1);
+  });
+
+  it('registro antigo sem hash é tratado como sem mudança (não reenvia tudo após atualizar a ferramenta)', async () => {
+    const { processor, notifier, store } = buildProcessor();
+    await store.put(ctx.runId, { studentId: 'A1', status: 'SENT', attempts: 1, updatedAt: new Date().toISOString() });
+    const outcome = await processor.process(ctx, student());
+    expect(outcome.status).toBe('skipped');
+    expect(notifier.sent).toHaveLength(0);
   });
 });

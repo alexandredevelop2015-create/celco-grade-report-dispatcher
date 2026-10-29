@@ -15,6 +15,8 @@ export interface DispatchOptions {
   concurrency: number;
   /** Só lê e valida o arquivo: não chama LLM nem envia nada. */
   validateOnly?: boolean;
+  /** Alunos a reenviar mesmo sem mudança nas notas (ex.: pedido da secretaria). */
+  resend?: string[];
   outputDir: string;
   model: string;
 }
@@ -50,9 +52,15 @@ export class DispatcherService {
     let outcomes: StudentOutcome[] = [];
     if (!options.validateOnly) {
       const ctx = { runId: options.runId, period: options.period, traceId: tracer.traceId };
+      const resend = new Set(options.resend ?? []);
+      for (const id of resend) {
+        if (!load.students.some((s) => s.studentId === id)) {
+          log.warn({ event: 'resend_not_found', studentId: id }, '--resend: aluno não está no CSV (ou está em quarentena)');
+        }
+      }
       outcomes = await tracer.span('process_students', { students: load.students.length }, () =>
         runWithConcurrency(load.students, options.concurrency, async (student) => {
-          const outcome = await this.processor.process(ctx, student);
+          const outcome = await this.processor.process(ctx, student, { forceResend: resend.has(student.studentId) });
           this.trackStudent(options.runId, outcome);
           return outcome;
         }),

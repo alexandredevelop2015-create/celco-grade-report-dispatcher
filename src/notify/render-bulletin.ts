@@ -9,15 +9,21 @@ export function renderBulletin(params: {
   student: StudentGrades;
   profile: GradeProfile;
   summary: SummaryText;
+  /** Hash dos dados: entra na chave de idempotência para o reenvio não ser descartado como duplicado. */
+  version: string;
+  /** true quando é a correção de um boletim já enviado. */
+  updated?: boolean;
 }): NotificationMessage {
-  const { runId, period, student, profile, summary } = params;
+  const { runId, period, student, profile, summary, version, updated } = params;
   const firstName = student.name.split(' ')[0] ?? student.name;
 
   const lines = profile.subjects.map((s) => `  - ${s.subject}: ${s.grade}/${profile.scale} (${STATUS_LABEL[s.status]})`);
   const text = [
     `Olá, ${firstName}!`,
     '',
-    `O teu boletim do período ${period} já está disponível.`,
+    updated
+      ? `Atualizámos o teu boletim do período ${period}: houve uma alteração nas tuas notas.`
+      : `O teu boletim do período ${period} já está disponível.`,
     '',
     ...lines,
     '',
@@ -38,7 +44,9 @@ export function renderBulletin(params: {
     .join('');
   const html = [
     `<p>Olá, ${escapeHtml(firstName)}!</p>`,
-    `<p>O teu boletim do período <strong>${escapeHtml(period)}</strong> já está disponível.</p>`,
+    updated
+      ? `<p>Atualizámos o teu boletim do período <strong>${escapeHtml(period)}</strong>: houve uma alteração nas tuas notas.</p>`
+      : `<p>O teu boletim do período <strong>${escapeHtml(period)}</strong> já está disponível.</p>`,
     `<table border="1" cellpadding="6" cellspacing="0"><tr><th>Disciplina</th><th>Nota</th><th>Estado</th></tr>${rows}</table>`,
     `<p><strong>Média:</strong> ${profile.average}/${profile.scale}</p>`,
     `<p><strong>Pontos fortes:</strong> ${escapeHtml(summary.strengths)}<br>`,
@@ -48,10 +56,10 @@ export function renderBulletin(params: {
   ].join('');
 
   return {
-    idempotencyKey: `${runId}:${student.studentId}`,
+    idempotencyKey: `${runId}:${student.studentId}:${version.slice(0, 8)}`,
     to: student.email,
     toName: student.name,
-    subject: `Boletim ${period}`,
+    subject: updated ? `Boletim ${period} (atualizado)` : `Boletim ${period}`,
     text,
     html,
   };

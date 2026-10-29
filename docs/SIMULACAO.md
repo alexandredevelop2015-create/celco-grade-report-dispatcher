@@ -117,3 +117,27 @@ node dist/cli.js dispatch --file data/grades.sample.csv --period so-validar --va
 ## Detalhe para explicar com precisão
 
 No cenário 5 o relatório mostra "Resumo por LLM: 6" com custo zero. Os resumos foram **gerados** pelo LLM no cenário 4 (que pagou) e apenas **reaproveitados** no 5.
+
+## 7. Lançar aluno novo ou alterar nota (reenvio automático)
+
+O estado guarda uma **impressão digital** (hash) das notas, do nome e do e-mail de cada aluno. A cada execução do **mesmo período**:
+
+| Situação no CSV | O que acontece |
+|---|---|
+| Aluno novo | Recebe o boletim normal |
+| Nota alterada, ou disciplina acrescentada | Recebe um boletim **"(atualizado)"** com resumo novo e o aviso "houve uma alteração nas tuas notas" |
+| Sem mudança | Ignorado (custo zero) |
+
+```powershell
+# 1. edite o CSV: acrescente as linhas do aluno novo ou corrija a nota
+# 2. rode o MESMO comando e o MESMO --period (sem --fresh)
+node dist/cli.js dispatch --file data/grades.sample.csv --period 2026-1S
+```
+
+Para forçar o reenvio de alguém **sem** mudança nas notas: `--resend A1001` (vários: `--resend A1001,A1002`). Reaproveita o resumo salvo, então custa zero de LLM.
+
+O relatório mostra `Enviados: N (M atualizados)`. O `Message-ID` do e-mail inclui o hash, então o reenvio não é confundido com duplicata.
+
+**CSV do Excel:** arquivos com `;` e BOM são detectados automaticamente pelo cabeçalho.
+
+**Limite conhecido:** execuções antigas (anteriores a este recurso) não têm hash e são tratadas como "sem mudança". Para elas, use `--fresh` ou `--resend`.

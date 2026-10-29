@@ -15,7 +15,7 @@ import {
   SummaryText,
   TokenUsage,
 } from '../domain/types';
-import { buildProfile, profileCacheKey, AcademicRules } from '../grades/profile';
+import { buildProfile, profileCacheKey, studentDataHash, AcademicRules } from '../grades/profile';
 import { BudgetGuard, estimateCostUsd, estimateTokens, Pricing } from '../llm/cost';
 import { buildFallbackSummary } from '../llm/fallback-summary';
 import { buildUserPrompt, PROMPT_VERSION, SYSTEM_PROMPT } from '../llm/prompt';
@@ -34,6 +34,8 @@ export interface RunContext {
 export interface StudentOutcome {
   studentId: string;
   status: 'sent' | 'skipped' | 'failed';
+  /** true quando reenviou um boletim já enviado porque as notas mudaram (ou por --resend). */
+  updated?: boolean;
   source?: SummarySource;
   usage: TokenUsage;
   costUsd: number;
@@ -95,21 +97,27 @@ export class StudentProcessor {
     this.now = deps.now ?? Date.now;
   }
 
-  async process(ctx: RunContext, student: StudentGrades): Promise<StudentOutcome> {
+  async process(ctx: RunContext, student: StudentGrades, options: { forceResend?: boolean } = {}): Promise<StudentOutcome> {
     const started = this.now();
     const log = this.deps.logger.child({ runId: ctx.runId, traceId: ctx.traceId, studentId: student.studentId });
     const elapsed = () => this.now() - started;
 
     const existing = await this.deps.store.get(ctx.runId, student.studentId);
-    if (existing?.status === 'SENT') {
-      log.info({ event: 'student_skipped' }, 'já enviado nesta execução, ignorado (idempotência)');
+    const dataHash = studentDataHash(student);
+    // Registros antigos (sem hash) são tratados como "sem mudança" para não reenviar tudo após uma atualização.
+    const dataChanged = existing?.dataHash !== undefined && existing.dataHash !== dataHash;
+    const alreadySent = existing?.status === 'SENT';
+    const updated = alreadySent && (dataChanged || options.forceResend === true);
+    if (alreadySent && !updated) {
+      log.info({ event: 'student_skipped' }, 'já enviado e sem alterações, ignorado (idempotência)');
       return { studentId: student.studentId, status: 'skipped', usage: NO_USAGE, costUsd: 0, llmAttempts: 0, durationMs: elapsed() };
     }
 
     const profile = buildProfile(student, this.deps.rules);
     let obtained: Obtained | undefined;
     // Resumo de fallback não é reaproveitado: na retomada o LLM pode já ter voltado.
-    const reusable = existing?.summary && existing.summarySource !== 'fallback' ? existing : undefined;
+    // E só vale se as notas não mudaram: nota nova pede texto novo.
+    const reusable = existing?.summary && existing.summarySource !== 'fallback' && !dataChanged ? existing : undefined;
 
     try {
       obtained = reusable?.summary
@@ -123,19 +131,20 @@ export class StudentProcessor {
         : await this.obtainSummary(profile, log);
 
       if (!reusable?.summary) {
-        await this.deps.store.put(ctx.runId, this.record(student, 'GENERATED', obtained));
+        await this.deps.store.put(ctx.runId, this.record(student, dataHash, 'GENERATED', obtained));
       }
 
-      await this.send(ctx, student, profile, obtained.summary, log);
-      await this.deps.store.put(ctx.runId, this.record(student, 'SENT', obtained));
+      await this.send(ctx, student, profile, obtained.summary, dataHash, updated, log);
+      await this.deps.store.put(ctx.runId, this.record(student, dataHash, 'SENT', obtained));
 
       log.info(
-        { event: 'student_sent', source: obtained.source, costUsd: obtained.costUsd, durationMs: elapsed() },
-        'boletim enviado',
+        { event: 'student_sent', updated, source: obtained.source, costUsd: obtained.costUsd, durationMs: elapsed() },
+        updated ? 'boletim atualizado reenviado' : 'boletim enviado',
       );
       return {
         studentId: student.studentId,
         status: 'sent',
+        updated,
         source: obtained.source,
         usage: obtained.usage,
         costUsd: obtained.costUsd,
@@ -149,7 +158,7 @@ export class StudentProcessor {
       const level = info.kind === 'unexpected' ? 'error' : 'warn';
       log[level]({ event: 'student_failed', kind: info.kind, err: info.message, durationMs: elapsed() }, 'falha ao processar aluno');
       await this.deps.store
-        .put(ctx.runId, this.record(student, 'FAILED', obtained, info))
+        .put(ctx.runId, this.record(student, dataHash, 'FAILED', obtained, info))
         .catch((e: unknown) => log.error({ err: String(e) }, 'não consegui gravar o estado FAILED'));
       return {
         studentId: student.studentId,
@@ -166,6 +175,7 @@ export class StudentProcessor {
 
   private record(
     student: StudentGrades,
+    dataHash: string,
     status: StudentRecord['status'],
     obtained: Obtained | undefined,
     error?: StudentRecord['error'],
@@ -173,6 +183,7 @@ export class StudentProcessor {
     return {
       studentId: student.studentId,
       status,
+      dataHash,
       attempts: obtained?.attempts ?? 0,
       summary: obtained?.summary,
       summarySource: obtained?.source,
@@ -231,10 +242,12 @@ export class StudentProcessor {
     student: StudentGrades,
     profile: GradeProfile,
     summary: SummaryText,
+    version: string,
+    updated: boolean,
     log: AppLogger,
   ): Promise<void> {
     const d = this.deps;
-    const message = renderBulletin({ runId: ctx.runId, period: ctx.period, student, profile, summary });
+    const message = renderBulletin({ runId: ctx.runId, period: ctx.period, student, profile, summary, version, updated });
     await withRetry(
       () =>
         d.notifyBreaker.exec(async () => {

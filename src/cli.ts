@@ -14,6 +14,7 @@ const USAGE = `Uso: node dist/cli.js dispatch --file <notas.csv> --period <2026-
   --file <caminho>       CSV de notas (student_id,name,email,subject,grade)
   --period <rótulo>      Período letivo; identifica a execução e a idempotência (ex.: 2026-1S)
   --validate-only        Só valida o CSV e gera o relatório, sem LLM nem envio
+  --resend <ids>         Reenvia estes alunos (separe por vírgula) mesmo sem mudança nas notas
   --fresh                Apaga o estado do período antes de rodar (reenvia tudo; use em demos)
   --concurrency <n>      Alunos em paralelo (padrão: CONCURRENCY do ambiente)
 `;
@@ -26,6 +27,7 @@ async function main(): Promise<number> {
       period: { type: 'string' },
       'validate-only': { type: 'boolean', default: false },
       fresh: { type: 'boolean', default: false },
+      resend: { type: 'string', multiple: true },
       concurrency: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -58,6 +60,7 @@ async function main(): Promise<number> {
       period: values.period,
       concurrency: values.concurrency ? Number(values.concurrency) : config.CONCURRENCY,
       validateOnly: values['validate-only'],
+      resend: (values.resend ?? []).flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean),
       outputDir: config.OUTPUT_DIR,
       model: generator.model,
     });
