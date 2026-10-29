@@ -14,6 +14,7 @@ import { AnthropicSummaryGenerator } from './llm/anthropic-summary-generator';
 import { BudgetGuard } from './llm/cost';
 import { FakeSummaryGenerator } from './llm/fake-summary-generator';
 import { ConsoleNotifier } from './notify/console-notifier';
+import { ResendNotifier } from './notify/resend-notifier';
 import { SmtpNotifier } from './notify/smtp-notifier';
 import { FileAnalyticsSink } from './observability/analytics';
 import { AppLogger, createLogger } from './observability/logger';
@@ -67,7 +68,9 @@ export class AppModule {
         {
           provide: TOKENS.NOTIFIER,
           useFactory: (): Notifier =>
-            config.NOTIFIER === 'smtp'
+            config.NOTIFIER === 'resend'
+              ? new ResendNotifier({ apiKey: config.RESEND_API_KEY!, from: config.MAIL_FROM })
+              : config.NOTIFIER === 'smtp'
               ? new SmtpNotifier({
                   host: config.SMTP_HOST,
                   port: config.SMTP_PORT,
@@ -114,7 +117,9 @@ export class AppModule {
                 cooldownMs: config.BREAKER_COOLDOWN_MS,
               }),
               llmLimiter: new RateLimiter({ ratePerSec: config.LLM_REQUESTS_PER_SEC }),
-              notifyLimiter: new RateLimiter({ ratePerSec: config.NOTIFY_RATE_PER_SEC }),
+              notifyLimiter: new RateLimiter({
+                ratePerSec: config.NOTIFIER === 'resend' ? Math.min(config.NOTIFY_RATE_PER_SEC, config.RESEND_REQUESTS_PER_SEC) : config.NOTIFY_RATE_PER_SEC,
+              }),
               budget: new BudgetGuard(config.MAX_RUN_COST_USD),
               rules: { scaleMax: config.GRADE_SCALE_MAX, passMark: config.PASS_MARK },
               pricing: { inputPerMTok: config.LLM_PRICE_INPUT_PER_MTOK, outputPerMTok: config.LLM_PRICE_OUTPUT_PER_MTOK },

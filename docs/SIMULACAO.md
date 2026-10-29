@@ -191,3 +191,34 @@ node dist/cli.js dispatch --file data/grades.csv --period 2026-1S --confirm-remo
 Aluno com **linha rejeitada** (e-mail inválido etc.) ou em **quarentena** continua no arquivo e **não** é tratado como removido.
 
 **Limite conhecido:** registros criados antes deste recurso não guardam o e-mail do aluno. Se um deles for removido, o sistema avisa no log que não conseguiu notificar. Use `npm run demo` (ou `--fresh`) para recriar o estado.
+
+## 10. Envio real pelo Resend
+
+O Resend é um canal de e-mail por API (alternativa ao Mailpit local). Configure no `.env`:
+
+```
+NOTIFIER=resend
+RESEND_API_KEY=<sua chave, só de envio>
+MAIL_FROM="Secretaria Académica <onboarding@resend.dev>"
+```
+
+A chave **nunca vai para o Git** (`.env` está no `.gitignore`). Crie uma chave com permissão **"Sending access"**: se vazar, só consegue enviar, não lista domínios nem apaga nada.
+
+| Proteção | Como funciona |
+|---|---|
+| Idempotência | Cada envio leva o cabeçalho `Idempotency-Key` (`período:aluno:hash`). O Resend ignora repetições por 24 h, então um retry nunca vira e-mail duplicado |
+| Limite de taxa | Plano gratuito: 2 requisições/s. O limitador usa `RESEND_REQUESTS_PER_SEC=2`; um `429` é repetido respeitando `Retry-After` |
+| Erros | `429`/`5xx`/rede → retry com backoff e circuit breaker. `401`/`403`/`422` (chave inválida, domínio não verificado, e-mail inválido) → fatal, sem retry, com a mensagem do Resend |
+| Segredo | A chave só vai no cabeçalho `Authorization`; nunca aparece em log, erro ou relatório (há teste para isso) |
+
+### Limites da conta gratuita (importante para a demonstração)
+
+- Sem domínio verificado, o remetente só pode ser `onboarding@resend.dev` e **só entrega no e-mail do dono da conta**. Para enviar aos alunos de verdade é preciso verificar um domínio em https://resend.com/domains e usar um `MAIL_FROM` desse domínio. Com um domínio não verificado, o resultado é `403 validation_error`, como mostra o cenário abaixo.
+- Para testar sem enviar a ninguém, use os endereços de simulação do Resend: `delivered@resend.dev` (aceita), `bounced@resend.dev` (devolve) e variantes com `+etiqueta`, como `delivered+ana@resend.dev`.
+
+```powershell
+$env:NOTIFIER="resend"; $env:MAIL_FROM="Secretaria <onboarding@resend.dev>"
+node dist/cli.js dispatch --file data/grades.csv --period 2026-1S --fresh
+```
+
+Validado: 4 envios aceitos pela API para `delivered+...@resend.dev`, reexecução sem reenviar, e remetente de domínio não verificado falhando como `fatal` com a mensagem do Resend.

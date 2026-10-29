@@ -20,7 +20,10 @@ const schema = z.object({
   FALLBACK_ON_LLM_FAILURE: bool,
   FAKE_LLM_FAILURE_RATE: num(0),
   FAKE_LLM_LATENCY_MS: num(0),
-  NOTIFIER: z.enum(['console', 'smtp']).default('console'),
+  NOTIFIER: z.enum(['console', 'smtp', 'resend']).default('console'),
+  RESEND_API_KEY: z.string().optional(),
+  /** Plano gratuito do Resend: 2 requisições por segundo. */
+  RESEND_REQUESTS_PER_SEC: num(2),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: num(1025),
   SMTP_USER: z.string().optional(),
@@ -51,6 +54,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     throw new Error(`Configuração inválida: ${detail}`);
   }
   const cfg = parsed.data;
+  if (cfg.NOTIFIER === 'resend' && !cfg.RESEND_API_KEY) {
+    throw new Error('Configuração inválida: RESEND_API_KEY é obrigatória com NOTIFIER=resend');
+  }
   if (cfg.LLM_PROVIDER === 'anthropic' && !cfg.ANTHROPIC_API_KEY) {
     throw new Error('Configuração inválida: ANTHROPIC_API_KEY é obrigatória com LLM_PROVIDER=anthropic');
   }
