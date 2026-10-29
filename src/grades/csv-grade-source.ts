@@ -17,7 +17,7 @@ interface CsvRecord {
   info: { lines: number };
 }
 
-const rowSchema = (scaleMax: number) =>
+export const rowSchema = (scaleMax: number) =>
   z.object({
     student_id: z.string().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/),
     name: z.string().min(1).max(100),

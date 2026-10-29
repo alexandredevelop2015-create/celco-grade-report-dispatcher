@@ -21,6 +21,28 @@ npm run demo      # sem chave, sem Docker, sem custo
 
 Passo a passo detalhado para Windows, roteiro de demonstração e simulação de incidentes: **[docs/GUIA-DA-DEFESA.md](docs/GUIA-DA-DEFESA.md)**.
 
+## Interface web
+
+```bash
+npm run ui     # http://localhost:3000  (data/grades.csv, período 2026-1S)
+node dist/cli.js serve --file data/grades.csv --period 2026-1S --port 3000
+```
+
+Painel com os alunos e a situação de cada boletim, KPIs da última execução (envios, falhas, custo de tokens, tempo por aluno), relatório detalhado, planilha de alterações e eventos de analytics. Pela tela é possível **incluir, editar (dados e notas) e excluir** alunos e disciplinas, **executar o envio** e **reenviar** um boletim.
+
+Cada operação grava o CSV (que continua sendo a fonte da verdade), roda o pipeline e **informa por e-mail**:
+
+| Ação na tela | E-mail ao aluno | E-mail de auditoria à secretaria (`ADMIN_EMAIL`) |
+|---|---|---|
+| Incluir aluno | Boletim | Quem foi incluído e as notas |
+| Editar nota/dado | "Boletim (atualizado)" com antes → depois | O antes → depois e se o aluno foi avisado |
+| Excluir aluno | "Lançamento removido" (se já tinha boletim) | Notas anuladas |
+| Executar envio | Quem estiver pendente | Resumo da execução |
+
+Pode-se desmarcar "Avisar o aluno por e-mail": a alteração é gravada e auditada, e o aluno só é avisado na próxima execução. Para e-mail real, use `NOTIFIER=resend`, `RESEND_API_KEY`, um `MAIL_FROM` de domínio verificado no Resend (no modo de testes, `onboarding@resend.dev` entrega só ao dono da conta) e `ADMIN_EMAIL`.
+
+Segurança: o servidor escuta só em `127.0.0.1`, valida `Host`/`Origin` (DNS rebinding e CSRF), exige `application/json` nas escritas, usa CSP estrita e nunca injeta texto como HTML. Não há login: é uma ferramenta local da secretaria; para expor na rede, ponha um proxy com autenticação na frente.
+
 ## Comandos do dia a dia
 
 Existe **um só comando**. O que muda é o que você faz **no CSV antes** de rodá-lo; a ferramenta compara com o que já foi enviado naquele período e decide quem recebe e-mail.
@@ -46,7 +68,7 @@ Requisitos: Node ≥ 20.6 (testado no 24). Docker é opcional (só para o Mailpi
 
 ```bash
 npm install
-npm test                 # 58 testes unitários, de integração e de contrato
+npm test                 # 110 testes unitários, de integração e de contrato
 npm run demo             # roda o CSV de exemplo: LLM fake, e-mail impresso no console, custo zero
 ```
 
@@ -121,6 +143,7 @@ src/
   notify/        e-mail (SMTP), console, template do boletim
   resilience/    retry, circuit breaker, rate limiter, pool de concorrência
   store/         estado por aluno + cache (JSON atômico)
+  web/           interface web: servidor HTTP (node:http), casos de uso e auditoria por e-mail
   pipeline/      StudentProcessor (1 aluno, idempotente), DispatcherService (lote), relatório
   observability/ logs estruturados (pino + redaction), tracer simulado, analytics
   app.module.ts  composition root (injeção por token/porta)

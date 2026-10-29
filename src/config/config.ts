@@ -20,6 +20,9 @@ const schema = z.object({
   FALLBACK_ON_LLM_FAILURE: bool,
   FAKE_LLM_FAILURE_RATE: num(0),
   FAKE_LLM_LATENCY_MS: num(0),
+  /** Secretaria: recebe um e-mail de auditoria a cada alteração feita pela interface. */
+  ADMIN_EMAIL: z.string().email().optional(),
+  UI_PORT: num(3000),
   NOTIFIER: z.enum(['console', 'smtp', 'resend']).default('console'),
   RESEND_API_KEY: z.string().optional(),
   /** Plano gratuito do Resend: 2 requisições por segundo. */

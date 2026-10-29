@@ -8,6 +8,9 @@ import { loadConfig } from './config/config';
 import { SummaryGenerator, TOKENS } from './domain/ports';
 import { DispatcherService } from './pipeline/dispatcher.service';
 import { renderReportMarkdown } from './pipeline/report';
+import { createLogger } from './observability/logger';
+import { AdminService } from './web/admin-service';
+import { createUiServer } from './web/server';
 
 const USAGE = `Uso: node dist/cli.js dispatch --file <notas.csv> --period <2026-1S> [opções]
 
@@ -18,7 +21,30 @@ const USAGE = `Uso: node dist/cli.js dispatch --file <notas.csv> --period <2026-
   --confirm-removals     Libera o aviso de remoção quando a trava de segurança bloqueia (muitos alunos sumiram do CSV)
   --fresh                Apaga o estado do período antes de rodar (reenvia tudo; use em demos)
   --concurrency <n>      Alunos em paralelo (padrão: CONCURRENCY do ambiente)
+
+Interface web (cadastro de alunos/notas, envio e acompanhamento):
+  node dist/cli.js serve --file <notas.csv> --period <2026-1S> [--port 3000]
 `;
+
+/** Sobe a interface web e fica de pé até Ctrl+C. */
+async function serve(file: string, period: string, portArg?: string): Promise<number> {
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(period)) {
+    process.stderr.write('--period deve ter só letras, números, ponto, hífen ou sublinhado (máx. 40).\n');
+    return 2;
+  }
+  const config = loadConfig(process.env);
+  const port = portArg ? Number(portArg) : config.UI_PORT;
+  const logger = createLogger(config.LOG_LEVEL);
+  const server = createUiServer(new AdminService({ config, csvPath: file, period }), logger, port);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', resolve);
+  });
+  process.stdout.write(`Interface em http://localhost:${port}  (período ${period}, notificador ${config.NOTIFIER}, auditoria ${config.ADMIN_EMAIL ? 'ligada' : 'desligada'})\n`);
+  await new Promise<void>((resolve) => process.once('SIGINT', resolve).once('SIGTERM', resolve));
+  server.close();
+  return 0;
+}
 
 async function main(): Promise<number> {
   const { positionals, values } = parseArgs({
@@ -31,9 +57,12 @@ async function main(): Promise<number> {
       'confirm-removals': { type: 'boolean', default: false },
       resend: { type: 'string', multiple: true },
       concurrency: { type: 'string' },
+      port: { type: 'string' },
       help: { type: 'boolean', short: 'h', default: false },
     },
   });
+
+  if (positionals[0] === 'serve' && values.file && values.period && !values.help) return serve(values.file, values.period, values.port);
 
   if (values.help || positionals[0] !== 'dispatch' || !values.file || !values.period) {
     process.stdout.write(USAGE);

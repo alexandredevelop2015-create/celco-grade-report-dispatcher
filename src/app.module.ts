@@ -30,6 +30,8 @@ export interface AppOptions {
   csvPath: string;
   /** Nome do arquivo de estado dentro de OUTPUT_DIR (um por período). */
   statePath: string;
+  /** Substitui o canal configurado (testes e integrações embarcadas). */
+  notifier?: Notifier;
 }
 
 /**
@@ -68,7 +70,8 @@ export class AppModule {
         {
           provide: TOKENS.NOTIFIER,
           useFactory: (): Notifier =>
-            config.NOTIFIER === 'resend'
+            options.notifier ??
+            (config.NOTIFIER === 'resend'
               ? new ResendNotifier({ apiKey: config.RESEND_API_KEY!, from: config.MAIL_FROM })
               : config.NOTIFIER === 'smtp'
               ? new SmtpNotifier({
@@ -78,7 +81,7 @@ export class AppModule {
                   pass: config.SMTP_PASS,
                   from: config.MAIL_FROM,
                 })
-              : new ConsoleNotifier(),
+              : new ConsoleNotifier()),
         },
         { provide: 'STATE_STORE', useFactory: () => JsonStateStore.open(options.statePath) },
         { provide: TOKENS.RUN_STORE, useExisting: 'STATE_STORE' },
@@ -140,7 +143,7 @@ export class AppModule {
           inject: [TOKENS.GRADE_SOURCE, StudentProcessor, TOKENS.ANALYTICS, TOKENS.LOGGER],
         },
       ],
-      exports: [DispatcherService, TOKENS.SUMMARY_GENERATOR],
+      exports: [DispatcherService, TOKENS.SUMMARY_GENERATOR, TOKENS.NOTIFIER],
     };
   }
 }
