@@ -1,4 +1,4 @@
-import { GradeProfile, NotificationMessage, StudentGrades, SummaryText } from '../domain/types';
+import { GradeChange, GradeProfile, NotificationMessage, StudentGrades, SummaryText } from '../domain/types';
 import { escapeHtml } from '../grades/sanitize';
 
 const STATUS_LABEL = { strong: 'Muito bom', ok: 'Aprovado', attention: 'Atenção' } as const;
@@ -13,10 +13,15 @@ export function renderBulletin(params: {
   version: string;
   /** true quando é a correção de um boletim já enviado. */
   updated?: boolean;
+  /** Disciplinas alteradas desde o último boletim (só usado quando `updated`). */
+  changes?: GradeChange[];
 }): NotificationMessage {
-  const { runId, period, student, profile, summary, version, updated } = params;
+  const { runId, period, student, profile, summary, version, updated, changes = [] } = params;
   const firstName = student.name.split(' ')[0] ?? student.name;
 
+  const changed = updated ? changes.filter((c) => c.after !== undefined) : [];
+  const changeLine = (c: GradeChange) =>
+    c.before === undefined ? `${c.subject}: ${c.after}/${profile.scale} (nova)` : `${c.subject}: ${c.before} → ${c.after}/${profile.scale}`;
   const lines = profile.subjects.map((s) => `  - ${s.subject}: ${s.grade}/${profile.scale} (${STATUS_LABEL[s.status]})`);
   const text = [
     `Olá, ${firstName}!`,
@@ -25,6 +30,7 @@ export function renderBulletin(params: {
       ? `Atualizámos o teu boletim do período ${period}: houve uma alteração nas tuas notas.`
       : `O teu boletim do período ${period} já está disponível.`,
     '',
+    ...(changed.length ? ['Alterações:', ...changed.map((c) => `  - ${changeLine(c)}`), ''] : []),
     ...lines,
     '',
     `Média: ${profile.average}/${profile.scale}`,
@@ -47,6 +53,7 @@ export function renderBulletin(params: {
     updated
       ? `<p>Atualizámos o teu boletim do período <strong>${escapeHtml(period)}</strong>: houve uma alteração nas tuas notas.</p>`
       : `<p>O teu boletim do período <strong>${escapeHtml(period)}</strong> já está disponível.</p>`,
+    changed.length ? `<p><strong>Alterações:</strong></p><ul>${changed.map((c) => `<li>${escapeHtml(changeLine(c))}</li>`).join('')}</ul>` : '',
     `<table border="1" cellpadding="6" cellspacing="0"><tr><th>Disciplina</th><th>Nota</th><th>Estado</th></tr>${rows}</table>`,
     `<p><strong>Média:</strong> ${profile.average}/${profile.scale}</p>`,
     `<p><strong>Pontos fortes:</strong> ${escapeHtml(summary.strengths)}<br>`,

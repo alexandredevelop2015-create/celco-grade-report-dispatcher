@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { AnalyticsSink, GradeSource } from '../domain/ports';
 import { LoadResult } from '../domain/types';
 import { AppLogger } from '../observability/logger';
+import { ChangeLedger } from '../observability/change-ledger';
 import { Tracer } from '../observability/tracer';
 import { runWithConcurrency } from '../resilience/concurrency';
 import { buildReport, renderReportMarkdown, RunReport } from './report';
@@ -66,6 +67,9 @@ export class DispatcherService {
         }),
       );
     }
+
+    const changeRows = await new ChangeLedger(join(options.outputDir, options.runId, 'alteracoes.csv')).append(outcomes);
+    if (changeRows) log.info({ event: 'changes_recorded', rows: changeRows }, 'alterações registradas em alteracoes.csv');
 
     const report = buildReport({
       runId: options.runId,

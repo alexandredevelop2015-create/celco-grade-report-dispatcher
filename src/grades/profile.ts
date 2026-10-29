@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { GradeProfile, StudentGrades, SubjectStatus } from '../domain/types';
+import { GradeChange, GradeEntry, GradeProfile, StudentGrades, SubjectStatus } from '../domain/types';
 
 export interface AcademicRules {
   scaleMax: number;
@@ -45,4 +45,18 @@ export function studentDataHash(student: StudentGrades): string {
   return createHash('sha256')
     .update(JSON.stringify({ name: student.name, email: student.email, grades }))
     .digest('hex');
+}
+
+/** O que mudou entre o último boletim enviado e as notas atuais (sem `before` = disciplina nova). */
+export function diffGrades(before: GradeEntry[] | undefined, after: GradeEntry[]): GradeChange[] {
+  const prev = new Map((before ?? []).map((g) => [g.subject, g.grade]));
+  const next = new Map(after.map((g) => [g.subject, g.grade]));
+  const changes: GradeChange[] = [];
+  for (const [subject, grade] of next) {
+    const old = prev.get(subject);
+    if (old === undefined) changes.push({ subject, after: grade });
+    else if (old !== grade) changes.push({ subject, before: old, after: grade });
+  }
+  for (const [subject, grade] of prev) if (!next.has(subject)) changes.push({ subject, before: grade });
+  return changes.sort((a, b) => a.subject.localeCompare(b.subject, 'pt'));
 }

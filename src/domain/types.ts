@@ -3,6 +3,13 @@ export interface GradeEntry {
   grade: number;
 }
 
+/** Diferença de uma disciplina entre o último boletim enviado e o atual. */
+export interface GradeChange {
+  subject: string;
+  before?: number;
+  after?: number;
+}
+
 export interface StudentGrades {
   studentId: string;
   name: string;
@@ -74,6 +81,8 @@ export interface StudentRecord {
   attempts: number;
   /** Impressão digital das notas/e-mail enviados: mudou => o boletim precisa ser reenviado. */
   dataHash?: string;
+  /** Notas do último boletim ENTREGUE com sucesso: base para dizer o que mudou no próximo. */
+  lastSentGrades?: GradeEntry[];
   summary?: SummaryText;
   summarySource?: SummarySource;
   error?: { kind: ErrorKind; message: string };

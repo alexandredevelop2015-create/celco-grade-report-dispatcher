@@ -141,3 +141,25 @@ O relatório mostra `Enviados: N (M atualizados)`. O `Message-ID` do e-mail incl
 **CSV do Excel:** arquivos com `;` e BOM são detectados automaticamente pelo cabeçalho.
 
 **Limite conhecido:** execuções antigas (anteriores a este recurso) não têm hash e são tratadas como "sem mudança". Para elas, use `--fresh` ou `--resend`.
+
+## 8. Planilha de alterações (`alteracoes.csv`)
+
+Cada lançamento fica registrado em `out/<período>/alteracoes.csv` (só cresce; nunca é sobrescrito). Abre direto no Excel em português (separador `;`, UTF-8 com BOM, decimais com vírgula).
+
+| Coluna | Conteúdo |
+|---|---|
+| `data_hora` | Momento do lançamento (UTC) |
+| `aluno_id`, `aluno` | Identificação |
+| `tipo` | `novo`, `atualizado` (nota ou disciplina mudou) ou `reenvio` (`--resend` sem mudança) |
+| `disciplina`, `nota_anterior`, `nota_nova` | O que mudou. Disciplina nova: `nota_anterior` vazia |
+| `resultado` | `enviado` ou `falha: <motivo>` |
+
+Exemplo, depois de corrigir a Matemática da Ana de 12 para 15:
+
+```
+"2026-10-29 17:35:58";"A1001";"Ana Ribeiro";"atualizado";"Matemática";"12";"15";"enviado"
+```
+
+O e-mail da aluna mostra o mesmo antes/depois (`Matemática: 12 → 15/20`). O estado (`state.json`) guarda só o valor atual; **o histórico está na planilha**. Se o envio falhar, a linha sai com `falha: ...`, e a nova tentativa compara com o último boletim **entregue**, não com o que falhou.
+
+A planilha contém nome do aluno: é um arquivo local de auditoria, não vai para o Git (`out/` está no `.gitignore`).

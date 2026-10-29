@@ -204,3 +204,38 @@ describe('reenvio quando as notas mudam', () => {
     expect(notifier.sent).toHaveLength(0);
   });
 });
+
+describe('registro do que mudou', () => {
+  it('informa antes/depois por disciplina e mostra no e-mail', async () => {
+    const { processor, notifier } = buildProcessor();
+    await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 7]]));
+    const outcome = await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 15]]));
+
+    expect(outcome.kind).toBe('atualizado');
+    expect(outcome.changes).toEqual([{ subject: 'Matemática', before: 7, after: 15 }]);
+    expect(notifier.sent[1]!.text).toContain('Matemática: 7 → 15/20');
+    expect(notifier.sent[1]!.html).toContain('<li>Matemática: 7 → 15/20</li>');
+  });
+
+  it('aluno novo vem como "novo" com todas as disciplinas', async () => {
+    const { processor } = buildProcessor();
+    const outcome = await processor.process(ctx, student('A1', [['Algoritmos', 18], ['Matemática', 7]]));
+    expect(outcome.kind).toBe('novo');
+    expect(outcome.changes).toHaveLength(2);
+  });
+
+  it('se o reenvio da atualização falhar, a nova tentativa continua sendo "atualizado" e compara com o último boletim ENTREGUE', async () => {
+    const { processor, notifier } = buildProcessor();
+    await processor.process(ctx, student('A1', [['Matemática', 7]]));
+
+    notifier.failWith = new FatalError('caixa cheia');
+    notifier.failTimes = 1;
+    const falha = await processor.process(ctx, student('A1', [['Matemática', 15]]));
+    expect(falha).toMatchObject({ status: 'failed', kind: 'atualizado' });
+
+    const retry = await processor.process(ctx, student('A1', [['Matemática', 15]]));
+    expect(retry).toMatchObject({ status: 'sent', updated: true, kind: 'atualizado' });
+    expect(retry.changes).toEqual([{ subject: 'Matemática', before: 7, after: 15 }]);
+    expect(notifier.sent[1]!.subject).toContain('(atualizado)');
+  });
+});
