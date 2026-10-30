@@ -16,6 +16,7 @@
 | 10 | **Estado em JSON local atrás de portas** | Zero infraestrutura para rodar e avaliar; a troca por Postgres/Redis é só um adaptador | Subir Postgres/Redis só para a demo |
 | 11 | **LLM e SMTP *fake*/console por padrão** | Demo e CI sem chave nem custo; permite injetar falhas | Exigir credenciais para rodar |
 | 12 | **Português de Portugal** nos textos ao aluno, escala 0–20, aprovado ≥ 10 | Contexto da instituição (Lisboa) | Escala 0–10 genérica |
+| 13 | **Truncagem de contexto** (`truncateProfile`, teto de 20 disciplinas, as em atenção primeiro, `omitted` informado ao LLM) | Limita o custo de entrada por aluno sem perder o que importa; a média usa todas as disciplinas | Mandar tudo sempre |
 
 ## O que **não** implementei (e por quê)
 
@@ -29,8 +30,8 @@
 | **Batch API do provedor / prompt caching** | O prompt é curto (abaixo do mínimo cacheável) e o envio é por aluno; batch API é assíncrona e mais barata, boa para volume | Batch API com desconto para jobs não urgentes |
 | **Contabilizar tokens de tentativas que falharam no parse** | Subestima levemente o custo quando a saída vem malformada | Retornar `usage` também no erro |
 | **Template i18n / anexo PDF do boletim** | Fora do foco do desafio | Renderizar PDF e anexar |
-| **Teste de integração contra SMTP/LLM reais** | Sem credenciais no CI; o SMTP foi coberto por teste de classificação de erro, não por servidor real | Mailpit no CI + teste de contrato gravado |
-| **Autenticação/UI** | Não pedido | n/a |
+| **Teste de integração contra SMTP/LLM reais** | Sem credenciais no CI; Resend e SMTP têm teste de classificação de erro e idempotência com cliente simulado; o envio real depende de credenciais | Mailpit no CI + teste de contrato gravado |
+| **Autenticação na UI** | A interface web (extra, não pedida) é ferramenta local: escuta só em 127.0.0.1, valida Host/Origin e usa CSP estrita | Proxy com autenticação na frente, ou SSO |
 
 ## Riscos conhecidos
 

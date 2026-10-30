@@ -46,7 +46,10 @@
         <label>Matrícula<input name="studentId" required maxlength="32" autocomplete="off"></label>
         <label>Nome<input name="name" required maxlength="100" autocomplete="off"></label>
       </div>
-      <label>E-mail<input name="email" type="email" required maxlength="120" autocomplete="off"></label>
+      <div class="grid2">
+        <label>E-mail<input name="email" type="email" required maxlength="120" autocomplete="off"></label>
+        <label>WhatsApp (opcional)<input name="phone" inputmode="tel" maxlength="20" placeholder="5511999990000" autocomplete="off"></label>
+      </div>
       <fieldset>
         <legend>Disciplinas e notas <span class="muted" id="scale"></span></legend>
         <div id="grade-rows"></div>

@@ -86,6 +86,7 @@ export class AdminService {
       const changes: string[] = [];
       if (before.name !== after.name) changes.push(`nome: ${before.name} → ${after.name}`);
       if (before.email !== after.email) changes.push(`e-mail: ${before.email} → ${after.email}`);
+      if ((before.phone ?? '') !== (after.phone ?? '')) changes.push(`WhatsApp: ${before.phone ?? 'sem número'} → ${after.phone ?? 'sem número'}`);
       for (const c of diffGrades(before.grades, after.grades)) {
         changes.push(
           c.after === undefined

@@ -14,6 +14,8 @@ export interface StudentGrades {
   studentId: string;
   name: string;
   email: string;
+  /** WhatsApp em formato internacional, só dígitos (ex.: 5511999990000). Opcional. */
+  phone?: string;
   grades: GradeEntry[];
 }
 
@@ -86,6 +88,7 @@ export interface StudentRecord {
   /** Guardados para poder avisar o aluno se o lançamento for removido do CSV depois. */
   name?: string;
   email?: string;
+  phone?: string;
   /** Notas do último boletim ENTREGUE com sucesso: base para dizer o que mudou no próximo. */
   lastSentGrades?: GradeEntry[];
   summary?: SummaryText;
@@ -102,6 +105,10 @@ export interface NotificationMessage {
   subject: string;
   text: string;
   html: string;
+  /** Destino do canal WhatsApp (só dígitos); sem ele o canal é ignorado. */
+  phone?: string;
+  /** Versão curta para WhatsApp: o boletim completo vai por e-mail. */
+  whatsappText?: string;
 }
 
 export type AnalyticsEvent =

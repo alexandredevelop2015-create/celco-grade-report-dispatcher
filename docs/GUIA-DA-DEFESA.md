@@ -18,7 +18,7 @@ Pré-requisito: Node 20.6 ou superior. Docker só para ver e-mails no Mailpit.
 ```powershell
 cd "C:\Users\Alexandre\Documents\Projetos_pess\Genesis-ITS\celco-grade-report-dispatcher"
 npm install
-npm test          # 58 testes
+npm test          # 128 testes
 chcp 65001        # opcional: acentos corretos no console
 npm run demo      # LLM fake, e-mail impresso no terminal, custo zero
 ```
@@ -91,7 +91,7 @@ node dist/cli.js dispatch --file data/grades.sample.csv --period 2026-1S --valid
 | **Arquitetura** | `domain/ports.ts`, `app.module.ts` | "Hexagonal: o pipeline só conhece interfaces. Troco LLM, canal ou banco mudando uma linha no composition root." |
 | **Retry** | `resilience/retry.ts`; classificação em `anthropic-summary-generator.ts` (`classifyLlmError`) e `smtp-notifier.ts` (`classifySmtpError`) | "Backoff exponencial com jitter total, respeita `Retry-After`. Só repete erro transitório (429, 5xx, rede). 400/401 são fatais e erro de programação não repete." |
 | **Idempotência** | `student-processor.ts` (início de `process`), `store/json-state-store.ts` | "Chave `(período, aluno)`. `SENT` é pulado. O resumo é gravado antes do envio, então retomar não paga o LLM de novo." |
-| **Token management** | `llm/prompt.ts`, `llm/cost.ts`, `LLM_MAX_OUTPUT_TOKENS` | "Prompt curto, as contas (média, estado) são feitas em código, o LLM só redige. Saída em JSON de 3 campos com limite de tokens." |
+| **Token management** | `llm/prompt.ts` (`truncateProfile`), `llm/cost.ts`, `LLM_MAX_OUTPUT_TOKENS` | "Prompt curto, truncagem de contexto (teto de disciplinas, as em atenção primeiro), as contas (média, estado) são feitas em código, o LLM só redige. Saída em JSON de 3 campos com limite de tokens." |
 | **Prompt engineering** | `llm/prompt.ts`, `llm/parse-summary.ts` | "Papel, idioma, formato JSON, dados em bloco `<dados>` tratados como dados. A saída é validada por schema; se vier errada, conta como falha transitória e tenta de novo." |
 | **FinOps** | `llm/cost.ts` (`BudgetGuard`), `grades/profile.ts` (`profileCacheKey`), `LLM_MODEL` | "Quatro alavancas: modelo pequeno, cache por perfil de notas, teto de orçamento por execução (reserva antes de chamar) e fallback sem custo." |
 | **Rate limiting / circuit breaker** | `resilience/rate-limiter.ts`, `circuit-breaker.ts` | "O limiter espaça as chamadas. O breaker abre após N falhas seguidas e falha rápido; depois do cooldown testa com uma sonda." |
@@ -100,7 +100,7 @@ node dist/cli.js dispatch --file data/grades.sample.csv --period 2026-1S --valid
 | **Product analytics** | `observability/analytics.ts`, eventos em `dispatcher.service.ts` | "`run_started`, `student_processed`, `student_failed`, `run_completed`, em `events.ndjson`, prontos para um warehouse." |
 | **Segurança** | `grades/sanitize.ts`, `observability/logger.ts`, `config/config.ts` | "O LLM nunca vê nome ou e-mail. Entrada sanitizada, HTML escapado, logs com redaction, chave só por ambiente, e-mail mascarado." |
 | **Escalabilidade** | `student-processor.ts` + `docs/SCALING.md` | "O processador é stateless: todo estado está atrás de portas. Para escalar, é fila + N workers + Postgres/Redis. O pipeline não muda." |
-| **Testes** | `test/` | "58 testes: regras do CSV, retry com relógio falso, breaker, orçamento, idempotência, retomada, fallback, integração do lote e contrato do gerador." |
+| **Testes** | `test/` | "128 testes: regras do CSV, retry com relógio falso, breaker, orçamento, idempotência, retomada, fallback, integração do lote e contrato do gerador." |
 
 ## 5. Roteiro de demonstração (10 min)
 
@@ -120,7 +120,7 @@ As respostas completas estão em [DEBRIEFING.md](DEBRIEFING.md). As que mais der
 - **"O estado é um JSON, isso escala?"** Não, é de processo único, e está atrás de `RunStore`. Trocar por Postgres é um adaptador.
 - **"O fallback não esconde falha?"** Esconde do aluno, não da operação: o relatório conta e classifica cada fallback, e o evento de analytics carrega a origem. Em produção eu alertaria por taxa de fallback.
 - **"Os custos são reais?"** São estimativas: os preços são configuração (`LLM_PRICE_*`) e devem ser conferidos.
-- **"O SMTP foi testado?"** O envio real contra o Mailpit precisa do Docker; a classificação de erros SMTP está testada. Diga isso com naturalidade.
+- **"O e-mail foi testado de verdade?"** Os adaptadores (Resend e SMTP) têm testes de classificação de erro e idempotência com cliente simulado. O envio real exige credenciais (Resend) ou Docker (Mailpit): mostre na demo, não prometa o que não rodou.
 - **"Por que o LLM não recebe o nome?"** Minimização de dados pessoais: o texto não precisa do nome (a saudação é montada por nós), e isso também deixa o cache seguro.
 
 ## 7. Glossário

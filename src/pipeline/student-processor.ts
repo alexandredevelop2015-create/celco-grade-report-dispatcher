@@ -224,7 +224,7 @@ export class StudentProcessor {
       llmAttempts: 0,
     };
     try {
-      const message = renderRemoval({ runId: ctx.runId, period: ctx.period, studentId: record.studentId, name: record.name, email: record.email, previous });
+      const message = renderRemoval({ runId: ctx.runId, period: ctx.period, studentId: record.studentId, name: record.name, email: record.email, phone: record.phone, previous });
       await this.deliver(message, log);
       await this.deps.store.put(ctx.runId, {
         studentId: record.studentId,
@@ -232,6 +232,7 @@ export class StudentProcessor {
         attempts: record.attempts,
         name: record.name,
         email: record.email,
+        phone: record.phone,
         updatedAt: new Date(this.now()).toISOString(),
       });
       log.info({ event: 'student_removal_sent' }, 'aviso de lançamento removido enviado');
@@ -257,6 +258,7 @@ export class StudentProcessor {
       dataHash,
       name: student.name,
       email: student.email,
+      phone: student.phone,
       lastSentGrades,
       attempts: obtained?.attempts ?? 0,
       summary: obtained?.summary,
