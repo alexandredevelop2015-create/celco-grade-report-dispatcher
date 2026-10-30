@@ -24,6 +24,8 @@ O WhatsApp é **melhor esforço**: não há estado por canal. Quem precisar de g
 
 ## Configuração
 
+> **Modo de teste (temporário):** o workflow versionado está sem autenticação por segredo (`x-webhook-secret` é ignorado) e com a URL do Evolution fixa no nó; a chave da instância entra no header `apikey` do nó "Evolution GO - enviar texto" (placeholder `COLE_A_CHAVE_DA_INSTANCIA_AQUI`). Antes de produção, restaurar a validação do segredo e tirar a URL fixa. Ver o PR de promoção para a main.
+
 ### 1. No app (`.env`)
 
 ```

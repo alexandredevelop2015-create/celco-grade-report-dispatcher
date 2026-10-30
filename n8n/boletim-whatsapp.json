@@ -12,18 +12,24 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "boletim-whatsapp"
     },
     {
       "parameters": {
-        "jsCode": "// Valida segredo, payload e duplicidade (idempotencyKey). Não envia nada.\nconst req = $input.first().json;\nconst secret = $env.N8N_WEBHOOK_SECRET;\nconst got = req.headers?.['x-webhook-secret'];\nconst b = req.body ?? {};\n\nif (!secret || got !== secret) {\n  return [{ json: { status: 'unauthorized', httpCode: 401 } }];\n}\n\nconst phone = String(b.phone ?? '');\nconst text = String(b.text ?? '');\nconst key = String(b.idempotencyKey ?? '');\nif (!/^\\d{10,15}$/.test(phone) || !text || text.length > 1000 || !key) {\n  return [{ json: { status: 'invalid', httpCode: 400 } }];\n}\n\nconst data = $getWorkflowStaticData('global');\ndata.sent = data.sent ?? {};\nif (data.sent[key]) {\n  return [{ json: { status: 'duplicate', httpCode: 200 } }];\n}\n\nreturn [{ json: { status: 'ok', httpCode: 200, phone, text, key } }];"
+        "jsCode": "// Valida payload e duplicidade (TESTE: autenticação por segredo desativada) (idempotencyKey). Não envia nada.\nconst req = $input.first().json;\nconst b = req.body ?? {};\n\nconst phone = String(b.phone ?? '');\nconst text = String(b.text ?? '');\nconst key = String(b.idempotencyKey ?? '');\nif (!/^\\d{10,15}$/.test(phone) || !text || text.length > 1000 || !key) {\n  return [{ json: { status: 'invalid', httpCode: 400 } }];\n}\n\nconst data = $getWorkflowStaticData('global');\ndata.sent = data.sent ?? {};\nif (data.sent[key]) {\n  return [{ json: { status: 'duplicate', httpCode: 200 } }];\n}\n\nreturn [{ json: { status: 'ok', httpCode: 200, phone, text, key } }];"
       },
       "id": "a1f0c1d2-0002-4a00-9000-000000000002",
       "name": "Validar e deduplicar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0]
+      "position": [
+        220,
+        0
+      ]
     },
     {
       "parameters": {
@@ -40,18 +46,21 @@
       "name": "Pode enviar?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL }}/send/text",
+        "url": "https://crm.genesisits.com.br/send/text",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.EVOLUTION_API_KEY }}"
+              "value": "COLE_A_CHAVE_DA_INSTANCIA_AQUI"
             }
           ]
         },
@@ -66,7 +75,10 @@
       "name": "Evolution GO - enviar texto",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, -100]
+      "position": [
+        660,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -76,7 +88,10 @@
       "name": "Marcar como enviada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, -100]
+      "position": [
+        880,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -90,7 +105,10 @@
       "name": "Responder (enviado)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1100, -100]
+      "position": [
+        1100,
+        -100
+      ]
     },
     {
       "parameters": {
@@ -104,22 +122,79 @@
       "name": "Responder (recusado/duplicado)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [660, 120]
+      "position": [
+        660,
+        120
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Validar e deduplicar", "type": "main", "index": 0 }]] },
-    "Validar e deduplicar": { "main": [[{ "node": "Pode enviar?", "type": "main", "index": 0 }]] },
-    "Pode enviar?": {
+    "Webhook": {
       "main": [
-        [{ "node": "Evolution GO - enviar texto", "type": "main", "index": 0 }],
-        [{ "node": "Responder (recusado/duplicado)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Validar e deduplicar",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Evolution GO - enviar texto": { "main": [[{ "node": "Marcar como enviada", "type": "main", "index": 0 }]] },
-    "Marcar como enviada": { "main": [[{ "node": "Responder (enviado)", "type": "main", "index": 0 }]] }
+    "Validar e deduplicar": {
+      "main": [
+        [
+          {
+            "node": "Pode enviar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pode enviar?": {
+      "main": [
+        [
+          {
+            "node": "Evolution GO - enviar texto",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder (recusado/duplicado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution GO - enviar texto": {
+      "main": [
+        [
+          {
+            "node": "Marcar como enviada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar como enviada": {
+      "main": [
+        [
+          {
+            "node": "Responder (enviado)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "active": false,
   "pinData": {}
 }
