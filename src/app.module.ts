@@ -14,7 +14,9 @@ import { AnthropicSummaryGenerator } from './llm/anthropic-summary-generator';
 import { BudgetGuard } from './llm/cost';
 import { FakeSummaryGenerator } from './llm/fake-summary-generator';
 import { ConsoleNotifier } from './notify/console-notifier';
+import { ResendNotifier } from './notify/resend-notifier';
 import { SmtpNotifier } from './notify/smtp-notifier';
+import { MultiChannelNotifier, WhatsappWebhookNotifier } from './notify/whatsapp-notifier';
 import { FileAnalyticsSink } from './observability/analytics';
 import { AppLogger, createLogger } from './observability/logger';
 import { DispatcherService } from './pipeline/dispatcher.service';
@@ -29,6 +31,8 @@ export interface AppOptions {
   csvPath: string;
   /** Nome do arquivo de estado dentro de OUTPUT_DIR (um por período). */
   statePath: string;
+  /** Substitui o canal configurado (testes e integrações embarcadas). */
+  notifier?: Notifier;
 }
 
 /**
@@ -66,8 +70,11 @@ export class AppModule {
         },
         {
           provide: TOKENS.NOTIFIER,
-          useFactory: (): Notifier =>
-            config.NOTIFIER === 'smtp'
+          useFactory: (logger: AppLogger): Notifier => {
+            const email = options.notifier ??
+            (config.NOTIFIER === 'resend'
+              ? new ResendNotifier({ apiKey: config.RESEND_API_KEY!, from: config.MAIL_FROM })
+              : config.NOTIFIER === 'smtp'
               ? new SmtpNotifier({
                   host: config.SMTP_HOST,
                   port: config.SMTP_PORT,
@@ -75,7 +82,17 @@ export class AppModule {
                   pass: config.SMTP_PASS,
                   from: config.MAIL_FROM,
                 })
-              : new ConsoleNotifier(),
+              : new ConsoleNotifier());
+            if (!config.N8N_WEBHOOK_URL) return email;
+            return new MultiChannelNotifier({
+              primary: email,
+              whatsapp: new WhatsappWebhookNotifier({ url: config.N8N_WEBHOOK_URL, secret: config.N8N_WEBHOOK_SECRET }),
+              limiter: new RateLimiter({ ratePerSec: config.WHATSAPP_REQUESTS_PER_SEC }),
+              retry: { attempts: config.RETRY_ATTEMPTS, baseDelayMs: config.RETRY_BASE_MS, maxDelayMs: config.RETRY_MAX_MS },
+              logger,
+            });
+          },
+          inject: [TOKENS.LOGGER],
         },
         { provide: 'STATE_STORE', useFactory: () => JsonStateStore.open(options.statePath) },
         { provide: TOKENS.RUN_STORE, useExisting: 'STATE_STORE' },
@@ -114,7 +131,9 @@ export class AppModule {
                 cooldownMs: config.BREAKER_COOLDOWN_MS,
               }),
               llmLimiter: new RateLimiter({ ratePerSec: config.LLM_REQUESTS_PER_SEC }),
-              notifyLimiter: new RateLimiter({ ratePerSec: config.NOTIFY_RATE_PER_SEC }),
+              notifyLimiter: new RateLimiter({
+                ratePerSec: config.NOTIFIER === 'resend' ? Math.min(config.NOTIFY_RATE_PER_SEC, config.RESEND_REQUESTS_PER_SEC) : config.NOTIFY_RATE_PER_SEC,
+              }),
               budget: new BudgetGuard(config.MAX_RUN_COST_USD),
               rules: { scaleMax: config.GRADE_SCALE_MAX, passMark: config.PASS_MARK },
               pricing: { inputPerMTok: config.LLM_PRICE_INPUT_PER_MTOK, outputPerMTok: config.LLM_PRICE_OUTPUT_PER_MTOK },
@@ -135,7 +154,7 @@ export class AppModule {
           inject: [TOKENS.GRADE_SOURCE, StudentProcessor, TOKENS.ANALYTICS, TOKENS.LOGGER],
         },
       ],
-      exports: [DispatcherService, TOKENS.SUMMARY_GENERATOR],
+      exports: [DispatcherService, TOKENS.SUMMARY_GENERATOR, TOKENS.NOTIFIER],
     };
   }
 }

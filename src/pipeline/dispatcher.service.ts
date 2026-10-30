@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { AnalyticsSink, GradeSource } from '../domain/ports';
 import { LoadResult } from '../domain/types';
 import { AppLogger } from '../observability/logger';
+import { ChangeLedger } from '../observability/change-ledger';
 import { Tracer } from '../observability/tracer';
 import { runWithConcurrency } from '../resilience/concurrency';
 import { buildReport, renderReportMarkdown, RunReport } from './report';
@@ -15,6 +16,10 @@ export interface DispatchOptions {
   concurrency: number;
   /** Só lê e valida o arquivo: não chama LLM nem envia nada. */
   validateOnly?: boolean;
+  /** Alunos a reenviar mesmo sem mudança nas notas (ex.: pedido da secretaria). */
+  resend?: string[];
+  /** Libera o envio de avisos de remoção mesmo quando a trava de segurança dispara. */
+  confirmRemovals?: boolean;
   outputDir: string;
   model: string;
 }
@@ -48,16 +53,45 @@ export class DispatcherService {
     this.analytics.track({ name: 'run_started', runId: options.runId, period: options.period, students: load.students.length });
 
     let outcomes: StudentOutcome[] = [];
+    let removalsBlocked = 0;
     if (!options.validateOnly) {
       const ctx = { runId: options.runId, period: options.period, traceId: tracer.traceId };
+      const resend = new Set(options.resend ?? []);
+      for (const id of resend) {
+        if (!load.students.some((s) => s.studentId === id)) {
+          log.warn({ event: 'resend_not_found', studentId: id }, '--resend: aluno não está no CSV (ou está em quarentena)');
+        }
+      }
       outcomes = await tracer.span('process_students', { students: load.students.length }, () =>
         runWithConcurrency(load.students, options.concurrency, async (student) => {
-          const outcome = await this.processor.process(ctx, student);
+          const outcome = await this.processor.process(ctx, student, { forceResend: resend.has(student.studentId) });
           this.trackStudent(options.runId, outcome);
           return outcome;
         }),
       );
+
+      // Lançamento apagado do CSV => avisa o aluno. Trava: apagar quase tudo costuma ser arquivo errado.
+      const present = new Set(load.seenIds);
+      const { candidates, deliveredTotal } = await this.processor.findRemovals(options.runId, present);
+      const suspicious = present.size === 0 || candidates.length > Math.max(3, Math.floor(deliveredTotal / 2));
+      if (candidates.length && suspicious && !options.confirmRemovals) {
+        removalsBlocked = candidates.length;
+        log.warn(
+          { event: 'removals_blocked', removals: candidates.length, deliveredTotal },
+          'muitas remoções de uma vez (ou CSV vazio): nada foi enviado. Confira o arquivo e use --confirm-removals se for isso mesmo',
+        );
+      } else if (candidates.length) {
+        const removals = await runWithConcurrency(candidates, options.concurrency, async (record) => {
+          const outcome = await this.processor.processRemoval(ctx, record);
+          if (outcome) this.trackStudent(options.runId, outcome);
+          return outcome;
+        });
+        outcomes = [...outcomes, ...removals.filter((o): o is StudentOutcome => o !== undefined)];
+      }
     }
+
+    const changeRows = await new ChangeLedger(join(options.outputDir, options.runId, 'alteracoes.csv')).append(outcomes);
+    if (changeRows) log.info({ event: 'changes_recorded', rows: changeRows }, 'alterações registradas em alteracoes.csv');
 
     const report = buildReport({
       runId: options.runId,
@@ -68,6 +102,7 @@ export class DispatcherService {
       finishedAt: new Date(),
       load: load satisfies LoadResult,
       outcomes,
+      removalsBlocked,
     });
 
     await this.writeReport(options.outputDir, report);

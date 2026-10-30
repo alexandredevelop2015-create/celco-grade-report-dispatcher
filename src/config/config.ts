@@ -20,7 +20,18 @@ const schema = z.object({
   FALLBACK_ON_LLM_FAILURE: bool,
   FAKE_LLM_FAILURE_RATE: num(0),
   FAKE_LLM_LATENCY_MS: num(0),
-  NOTIFIER: z.enum(['console', 'smtp']).default('console'),
+  /** Secretaria: recebe um e-mail de auditoria a cada alteração feita pela interface. */
+  ADMIN_EMAIL: z.string().email().optional(),
+  UI_PORT: num(3000),
+  /** Webhook do n8n que envia o WhatsApp via Evolution GO. Vazio = canal WhatsApp desligado. */
+  N8N_WEBHOOK_URL: z.string().url().optional(),
+  N8N_WEBHOOK_SECRET: z.string().optional(),
+  /** WhatsApp pune rajadas: padrão de 1 mensagem por segundo. */
+  WHATSAPP_REQUESTS_PER_SEC: num(1),
+  NOTIFIER: z.enum(['console', 'smtp', 'resend']).default('console'),
+  RESEND_API_KEY: z.string().optional(),
+  /** Plano gratuito do Resend: 2 requisições por segundo. */
+  RESEND_REQUESTS_PER_SEC: num(2),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: num(1025),
   SMTP_USER: z.string().optional(),
@@ -51,6 +62,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     throw new Error(`Configuração inválida: ${detail}`);
   }
   const cfg = parsed.data;
+  if (cfg.NOTIFIER === 'resend' && !cfg.RESEND_API_KEY) {
+    throw new Error('Configuração inválida: RESEND_API_KEY é obrigatória com NOTIFIER=resend');
+  }
   if (cfg.LLM_PROVIDER === 'anthropic' && !cfg.ANTHROPIC_API_KEY) {
     throw new Error('Configuração inválida: ANTHROPIC_API_KEY é obrigatória com LLM_PROVIDER=anthropic');
   }

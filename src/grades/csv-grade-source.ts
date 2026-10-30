@@ -17,20 +17,34 @@ interface CsvRecord {
   info: { lines: number };
 }
 
-const rowSchema = (scaleMax: number) =>
+export const rowSchema = (scaleMax: number) =>
   z.object({
     student_id: z.string().min(1).max(32).regex(/^[A-Za-z0-9._-]+$/),
     name: z.string().min(1).max(100),
     email: z.string().email().max(120),
     subject: z.string().min(1).max(80),
     grade: z.number().min(0).max(scaleMax),
+    phone: z.string().regex(/^\d{10,15}$/).optional(),
   });
+
+/** "+55 (11) 99999-0000" -> "5511999990000"; vazio -> undefined; lixo -> devolve como veio para o schema rejeitar. */
+export function normalizePhone(raw: string | undefined): string | undefined {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return undefined;
+  return /^\+?[\d\s().-]+$/.test(trimmed) ? trimmed.replace(/\D/g, '') : trimmed;
+}
 
 function reasonFor(field: string, value: string | undefined): RejectReason {
   if (value === undefined || value.trim() === '') return 'MISSING_FIELD';
   if (field === 'email') return 'INVALID_EMAIL';
   if (field === 'grade') return 'INVALID_GRADE';
   return 'INVALID_FIELD';
+}
+
+/** Cabeçalho com ';' e sem ',' => separador é ponto e vírgula. */
+export function detectDelimiter(content: string): ',' | ';' {
+  const header = content.replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] ?? '';
+  return header.includes(';') && !header.includes(',') ? ';' : ',';
 }
 
 /** Aceita "17,5" e "17.5"; qualquer outra coisa vira NaN e é rejeitada pelo schema. */
@@ -57,6 +71,8 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
   let records: CsvRecord[];
   try {
     records = parse(content, {
+      // Excel em português salva com ';': detecta pelo cabeçalho.
+      delimiter: detectDelimiter(content),
       columns: (header: string[]) => header.map((h) => h.trim().toLowerCase()),
       skip_empty_lines: true,
       trim: true,
@@ -76,8 +92,9 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
 
   const schema = rowSchema(options.scaleMax);
   const rejected: RejectedRow[] = [];
-  const byStudent = new Map<string, { name: string; email: string; grades: Map<string, number> }>();
+  const byStudent = new Map<string, { name: string; email: string; phone?: string; grades: Map<string, number> }>();
   const quarantined = new Set<string>();
+  const seenIds = new Set<string>();
   let duplicatesIgnored = 0;
 
   for (const { record, info } of records) {
@@ -88,7 +105,9 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       email: (record.email ?? '').trim().toLowerCase(),
       subject: sanitizeText(record.subject ?? '', 80),
       grade: parseGrade(record.grade),
+      phone: normalizePhone(record.phone),
     };
+    if (candidate.student_id) seenIds.add(candidate.student_id);
     const result = schema.safeParse(candidate);
     if (!result.success) {
       const field = String(result.error.issues[0]?.path[0] ?? 'row');
@@ -102,6 +121,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       byStudent.set(row.student_id, {
         name: row.name,
         email: row.email,
+        phone: row.phone,
         grades: new Map([[row.subject, row.grade]]),
       });
       continue;
@@ -112,6 +132,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       quarantined.add(row.student_id);
       continue;
     }
+    known.phone ??= row.phone;
     const previous = known.grades.get(row.subject);
     if (previous === undefined) {
       known.grades.set(row.subject, row.grade);
@@ -131,6 +152,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
       studentId,
       name: s.name,
       email: s.email,
+      ...(s.phone ? { phone: s.phone } : {}),
       grades: [...s.grades].map(([subject, grade]) => ({ subject, grade })),
     });
   }
@@ -140,6 +162,7 @@ export function parseGradesCsv(content: string, options: CsvOptions): LoadResult
     rejected,
     duplicatesIgnored,
     quarantined: [...quarantined],
+    seenIds: [...seenIds],
     totalRows: records.length,
   };
 }

@@ -3,10 +3,19 @@ export interface GradeEntry {
   grade: number;
 }
 
+/** Diferença de uma disciplina entre o último boletim enviado e o atual. */
+export interface GradeChange {
+  subject: string;
+  before?: number;
+  after?: number;
+}
+
 export interface StudentGrades {
   studentId: string;
   name: string;
   email: string;
+  /** WhatsApp em formato internacional, só dígitos (ex.: 5511999990000). Opcional. */
+  phone?: string;
   grades: GradeEntry[];
 }
 
@@ -32,6 +41,8 @@ export interface LoadResult {
   duplicatesIgnored: number;
   /** Alunos com notas contraditórias: nenhum boletim sai até a secretaria resolver. */
   quarantined: string[];
+  /** Todo student_id que apareceu no CSV, mesmo em linha rejeitada: aluno ausente daqui foi REMOVIDO. */
+  seenIds: string[];
   totalRows: number;
 }
 
@@ -64,7 +75,7 @@ export interface GeneratedSummary {
 
 export type SummarySource = 'llm' | 'cache' | 'fallback';
 
-export type StudentStatus = 'GENERATED' | 'SENT' | 'FAILED';
+export type StudentStatus = 'GENERATED' | 'SENT' | 'FAILED' | 'REMOVED';
 
 export type ErrorKind = 'retriable_exhausted' | 'fatal' | 'unexpected' | 'circuit_open' | 'budget';
 
@@ -72,6 +83,14 @@ export interface StudentRecord {
   studentId: string;
   status: StudentStatus;
   attempts: number;
+  /** Impressão digital das notas/e-mail enviados: mudou => o boletim precisa ser reenviado. */
+  dataHash?: string;
+  /** Guardados para poder avisar o aluno se o lançamento for removido do CSV depois. */
+  name?: string;
+  email?: string;
+  phone?: string;
+  /** Notas do último boletim ENTREGUE com sucesso: base para dizer o que mudou no próximo. */
+  lastSentGrades?: GradeEntry[];
   summary?: SummaryText;
   summarySource?: SummarySource;
   error?: { kind: ErrorKind; message: string };
@@ -86,6 +105,10 @@ export interface NotificationMessage {
   subject: string;
   text: string;
   html: string;
+  /** Destino do canal WhatsApp (só dígitos); sem ele o canal é ignorado. */
+  phone?: string;
+  /** Versão curta para WhatsApp: o boletim completo vai por e-mail. */
+  whatsappText?: string;
 }
 
 export type AnalyticsEvent =

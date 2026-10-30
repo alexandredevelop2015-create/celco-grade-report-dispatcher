@@ -14,7 +14,8 @@ flowchart LR
     PROC -->|retry → breaker → limiter| LLM[SummaryGenerator<br/>Anthropic / Fake]
     PROC -.->|falha/orçamento| FB[Fallback determinístico]
     PROC --> STORE[(RunStore<br/>state.json)]
-    PROC -->|retry → breaker → limiter| MAIL[Notifier<br/>SMTP / Console]
+    PROC -->|retry → breaker → limiter| MAIL[Notifier<br/>Resend / SMTP / Console]
+    PROC -.->|melhor esforço| WA[WhatsApp<br/>n8n + Evolution GO]
 
     DISP --> REP[report.json / report.md]
     DISP --> AN[AnalyticsSink<br/>events.ndjson]

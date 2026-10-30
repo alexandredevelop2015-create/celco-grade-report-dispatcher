@@ -34,6 +34,6 @@ Fila + Postgres + Redis (SCALING), OpenTelemetry real, métricas Prometheus, out
 
 ## Pontos fracos (assumir em vez de esconder)
 
-- O SMTP foi validado por testes de classificação e pelo cenário de falha; o envio contra um servidor real (Mailpit) exige Docker e deve ser conferido localmente.
+- O envio de e-mail (Resend/SMTP) é validado por testes com cliente simulado e pelo cenário de falha; o envio real depende de credenciais e deve ser conferido antes da demo (Resend, ou Mailpit com Docker).
 - O custo é estimativa; preços são configuração.
 - O estado em JSON é de processo único.

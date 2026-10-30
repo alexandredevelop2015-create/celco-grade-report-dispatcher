@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Despachante de Boletins</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Despachante de Boletins</h1>
+      <p class="sub" id="meta">carregando…</p>
+    </div>
+    <div class="actions">
+      <button id="btn-new" class="primary" type="button">+ Novo aluno</button>
+      <button id="btn-dispatch" type="button">Executar envio</button>
+      <button id="btn-refresh" type="button" title="Atualizar">↻</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+  <section id="kpis" class="kpis"></section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="students" aria-selected="true">Alunos</button>
+    <button role="tab" data-tab="report" aria-selected="false">Última execução</button>
+    <button role="tab" data-tab="changes" aria-selected="false">Alterações</button>
+    <button role="tab" data-tab="events" aria-selected="false">Eventos</button>
+  </nav>
+
+  <main>
+    <section id="tab-students">
+      <input id="search" type="search" placeholder="Buscar por nome, matrícula ou e-mail" aria-label="Buscar aluno">
+      <div class="table-wrap"><table id="students"></table></div>
+    </section>
+    <section id="tab-report" hidden></section>
+    <section id="tab-changes" hidden></section>
+    <section id="tab-events" hidden></section>
+  </main>
+
+  <dialog id="dlg-student">
+    <form method="dialog" id="form-student" novalidate>
+      <h2 id="dlg-title">Aluno</h2>
+      <div class="grid2">
+        <label>Matrícula<input name="studentId" required maxlength="32" autocomplete="off"></label>
+        <label>Nome<input name="name" required maxlength="100" autocomplete="off"></label>
+      </div>
+      <div class="grid2">
+        <label>E-mail<input name="email" type="email" required maxlength="120" autocomplete="off"></label>
+        <label>WhatsApp (opcional)<input name="phone" inputmode="tel" maxlength="20" placeholder="5511999990000" autocomplete="off"></label>
+      </div>
+      <fieldset>
+        <legend>Disciplinas e notas <span class="muted" id="scale"></span></legend>
+        <div id="grade-rows"></div>
+        <button type="button" id="btn-add-grade">+ Disciplina</button>
+      </fieldset>
+      <label class="check"><input type="checkbox" name="notify" checked> Avisar o aluno por e-mail</label>
+      <p class="errors" id="form-errors" role="alert"></p>
+      <div class="dlg-actions">
+        <button type="button" id="btn-cancel">Cancelar</button>
+        <button type="submit" class="primary" id="btn-save">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-confirm">
+    <form method="dialog" id="form-confirm">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <label class="check"><input type="checkbox" id="confirm-notify" checked> Avisar o aluno por e-mail</label>
+      <div class="dlg-actions">
+        <button type="button" id="confirm-cancel">Cancelar</button>
+        <button type="submit" class="danger" id="confirm-ok">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

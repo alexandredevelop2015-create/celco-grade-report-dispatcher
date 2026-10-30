@@ -6,7 +6,7 @@ import { BudgetGuard, estimateCostUsd } from '../src/llm/cost';
 import { buildFallbackSummary } from '../src/llm/fallback-summary';
 import { FakeSummaryGenerator } from '../src/llm/fake-summary-generator';
 import { parseSummary } from '../src/llm/parse-summary';
-import { buildUserPrompt } from '../src/llm/prompt';
+import { buildUserPrompt, MAX_PROMPT_SUBJECTS, truncateProfile } from '../src/llm/prompt';
 import { student } from './helpers';
 
 const rules = { scaleMax: 20, passMark: 10 };
@@ -25,6 +25,25 @@ describe('perfil e prompt', () => {
     const prompt = buildUserPrompt(profile);
     expect(prompt).not.toMatch(/Ana|ana@exemplo|A1/);
     expect(prompt.startsWith('<dados>')).toBe(true);
+  });
+
+  it('trunca o contexto: mantém disciplinas em atenção primeiro e informa as omitidas', () => {
+    const total = MAX_PROMPT_SUBJECTS + 5;
+    const big = {
+      ...profile,
+      subjects: Array.from({ length: total }, (_, i) =>
+        i === total - 1
+          ? { subject: 'Crítica', grade: 3, status: 'attention' as const }
+          : { subject: `D${i}`, grade: 18, status: 'strong' as const },
+      ),
+    };
+    const out = truncateProfile(big);
+    expect(out.subjects).toHaveLength(MAX_PROMPT_SUBJECTS);
+    expect(out.omitted).toBe(5);
+    expect(out.subjects[0]?.subject).toBe('Crítica');
+    expect(out.average).toBe(big.average);
+    expect(buildUserPrompt(big)).toContain('"omitted":5');
+    expect(truncateProfile(profile)).toBe(profile);
   });
 
   it('gera a mesma chave de cache para perfis iguais e outra ao mudar modelo/prompt', () => {
