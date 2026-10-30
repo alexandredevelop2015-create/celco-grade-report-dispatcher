@@ -72,7 +72,7 @@ Requisitos: Node ≥ 20.6 (testado no 24). Docker é opcional (só para o Mailpi
 
 ```bash
 npm install
-npm test                 # 127 testes unitários, de integração e de contrato
+npm test                 # 128 testes unitários, de integração e de contrato
 npm run demo             # roda o CSV de exemplo: LLM fake, e-mail impresso no console, custo zero
 ```
 
